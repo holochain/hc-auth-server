@@ -1,0 +1,195 @@
+use crate::state::AppState as SharedState;
+use axum::{
+    Json,
+    body::Bytes,
+    extract::{Path, State},
+    http::HeaderMap,
+    response::IntoResponse,
+};
+use base64::prelude::*;
+use ed25519_dalek::{Signature, VerifyingKey};
+
+pub async fn now_handler() -> impl IntoResponse {
+    use rand::prelude::*;
+
+    // Current time as f64 seconds since epoch
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("current time")
+        .as_secs_f64();
+
+    let mut buf = [0u8; 32];
+
+    // First 8 bytes: timestamp (f64 LE)
+    buf[..8].copy_from_slice(&now.to_le_bytes());
+
+    // Remaining 24 bytes: random
+    rand::rng().fill_bytes(&mut buf[8..]);
+
+    BASE64_URL_SAFE_NO_PAD.encode(buf).into_response()
+}
+
+pub async fn request_auth(
+    State(state): State<SharedState>,
+    Path(key): Path<String>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    if validate_pubkey(&key).is_err() {
+        return axum::http::StatusCode::UNAUTHORIZED.into_response();
+    }
+
+    let payload = serde_json::json!({
+        "createdAt": now(),
+        "lastAccess": now(),
+        "payload": payload,
+    });
+    if let Err(e) = state.storage.add_pending_request(&key, &payload) {
+        let err_msg = e.to_string();
+        if err_msg.contains("limit reached") {
+            return (
+                axum::http::StatusCode::TOO_MANY_REQUESTS,
+                "Pending request limit reached",
+            )
+                .into_response();
+        }
+        tracing::error!("Failed to set auth data: {}", e);
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to store data",
+        )
+            .into_response();
+    }
+
+    (axum::http::StatusCode::OK, "OK").into_response()
+}
+
+pub async fn authenticate(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> impl IntoResponse {
+    // Check Content-Type
+    if let Some(ct) = headers.get("content-type") {
+        if ct != "application/octet-stream" {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
+        }
+    } else {
+        return axum::http::StatusCode::UNAUTHORIZED.into_response();
+    }
+
+    // Parse bytes as UTF-8
+    let body_str = match String::from_utf8(body.to_vec()) {
+        Ok(s) => s,
+        Err(_) => return axum::http::StatusCode::UNAUTHORIZED.into_response(),
+    };
+
+    // Parse as JSON
+    let json_val: serde_json::Value = match serde_json::from_str(&body_str) {
+        Ok(j) => j,
+        Err(_) => return axum::http::StatusCode::UNAUTHORIZED.into_response(),
+    };
+
+    let signature = json_val.get("signature").and_then(|v| v.as_str());
+    let payload = json_val.get("payload").and_then(|v| v.as_str());
+
+    // Check pubKey
+    if let Some(pub_key) = json_val.get("pubKey").and_then(|v| v.as_str()) {
+        if validate_pubkey(&pub_key).is_err() {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
+        }
+        if let (Some(sig), Some(pay)) = (signature, payload) {
+            if validate_signature(pub_key, sig, pay).is_err() {
+                return axum::http::StatusCode::UNAUTHORIZED.into_response();
+            }
+        } else {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
+        }
+        match state.storage.authenticate_key(pub_key) {
+            Ok(Some(token)) => {
+                let resp = serde_json::json!({ "authToken": token });
+                (
+                    axum::http::StatusCode::OK,
+                    [(axum::http::header::CONTENT_TYPE, "application/json")],
+                    Json(resp),
+                )
+                    .into_response()
+            }
+            Ok(None) => axum::http::StatusCode::UNAUTHORIZED.into_response(),
+            Err(e) => {
+                tracing::error!("Auth error: {}", e);
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    } else {
+        axum::http::StatusCode::UNAUTHORIZED.into_response()
+    }
+}
+
+fn validate_pubkey(pk: &str) -> Result<(), ()> {
+    let pk = BASE64_URL_SAFE_NO_PAD.decode(pk).map_err(|_| ())?;
+    if pk.len() != 32 {
+        return Err(());
+    }
+    Ok(())
+}
+
+fn validate_signature(
+    base64_url_encoded_pubkey: &str,
+    base64_url_encoded_signature: &str,
+    base64_url_encoded_payload: &str,
+) -> Result<(), ()> {
+    // Decode inputs
+    let pubkey_bytes = BASE64_URL_SAFE_NO_PAD
+        .decode(base64_url_encoded_pubkey)
+        .map_err(|_| ())?;
+
+    let sig_bytes = BASE64_URL_SAFE_NO_PAD
+        .decode(base64_url_encoded_signature)
+        .map_err(|_| ())?;
+
+    let payload_bytes = BASE64_URL_SAFE_NO_PAD
+        .decode(base64_url_encoded_payload)
+        .map_err(|_| ())?;
+
+    if payload_bytes.len() != 32 {
+        return Err(());
+    }
+
+    // Extract timestamp
+    let ts_bytes: [u8; 8] = payload_bytes[..8].try_into().map_err(|_| ())?;
+    let timestamp = f64::from_le_bytes(ts_bytes);
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| ())?
+        .as_secs_f64();
+
+    const ALLOWED_DRIFT_SECS: f64 = 5.0 * 60.0;
+
+    if timestamp > now + ALLOWED_DRIFT_SECS {
+        return Err(());
+    }
+
+    if timestamp < now - ALLOWED_DRIFT_SECS {
+        return Err(());
+    }
+
+    // Parse key and signature
+    let verifying_key =
+        VerifyingKey::from_bytes(&pubkey_bytes.try_into().map_err(|_| ())?)
+            .map_err(|_| ())?;
+
+    let signature =
+        Signature::from_bytes(&sig_bytes.try_into().map_err(|_| ())?);
+
+    // Verify
+    verifying_key
+        .verify_strict(&payload_bytes, &signature)
+        .map_err(|_| ())?;
+
+    Ok(())
+}
+
+fn now() -> f64 {
+    std::time::UNIX_EPOCH.elapsed().unwrap().as_secs_f64()
+}
