@@ -73,6 +73,7 @@ fn redis_add_pending(
     key: &str,
     state: State,
     json: &str,
+    max_pending: usize,
 ) -> RedisResult<()> {
     lua_add_pending()
         .key(auth_key(key))
@@ -80,6 +81,7 @@ fn redis_add_pending(
         .arg(key)
         .arg(json)
         .arg(now_secs())
+        .arg(max_pending)
         .invoke(con)
 }
 
@@ -212,18 +214,17 @@ impl Storage {
         let json_str = serde_json::to_string(data)?;
 
         self.with_connection(|con| {
-            let count: u64 = redis::cmd("SCARD")
-                .arg(state_key(State::Pending))
-                .query(con)?;
-
-            if count >= self.max_pending_requests as u64 {
-                return Err(redis::RedisError::from((
-                    redis::ErrorKind::TypeError,
-                    "Pending request limit reached",
-                )));
-            }
-
-            redis_add_pending(con, key, State::Pending, &json_str)?;
+            redis_add_pending(con, key, State::Pending, &json_str, self.max_pending_requests)
+                .map_err(|e| {
+                    if e.to_string().contains("limit_reached") {
+                        redis::RedisError::from((
+                            redis::ErrorKind::TypeError,
+                            "Pending request limit reached",
+                        ))
+                    } else {
+                        e
+                    }
+                })?;
             Ok(())
         })
         .map_err(Into::into)
