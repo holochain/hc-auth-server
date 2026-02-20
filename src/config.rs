@@ -16,6 +16,9 @@ pub struct Config {
     pub redis_cluster_nodes: Option<String>,
     pub max_pending_requests: usize,
     pub api_tokens: HashSet<String>,
+
+    /// Number of seconds to allow for clock skew between the server and the client
+    pub drift_secs: f64,
 }
 
 impl Config {
@@ -45,6 +48,9 @@ impl Config {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect(),
+            drift_secs: env::var("DRIFT_SECS")
+                .unwrap_or_else(|_| "300.0".to_string()) // 5 minutes
+                .parse()?,
         })
     }
 }

@@ -98,7 +98,7 @@ pub async fn authenticate(
             return axum::http::StatusCode::UNAUTHORIZED.into_response();
         }
         if let (Some(sig), Some(pay)) = (signature, payload) {
-            if validate_signature(pub_key, sig, pay).is_err() {
+            if validate_signature(state.config.drift_secs, pub_key, sig, pay).is_err() {
                 return axum::http::StatusCode::UNAUTHORIZED.into_response();
             }
         } else {
@@ -134,6 +134,7 @@ fn validate_pubkey(pk: &str) -> Result<(), ()> {
 }
 
 fn validate_signature(
+    drift_secs: f64,
     base64_url_encoded_pubkey: &str,
     base64_url_encoded_signature: &str,
     base64_url_encoded_payload: &str,
@@ -164,13 +165,11 @@ fn validate_signature(
         .map_err(|_| ())?
         .as_secs_f64();
 
-    const ALLOWED_DRIFT_SECS: f64 = 5.0 * 60.0;
-
-    if timestamp > now + ALLOWED_DRIFT_SECS {
+    if timestamp > now + drift_secs {
         return Err(());
     }
 
-    if timestamp < now - ALLOWED_DRIFT_SECS {
+    if timestamp < now - drift_secs {
         return Err(());
     }
 
