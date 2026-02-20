@@ -33,6 +33,9 @@ jobs:
           cargo install cargo-sweep
           cargo sweep --stamp
 
+      - name: Copy Example Env
+        run: cp .env.example .env
+
       - name: Make Test
         run: make test
 
