@@ -50,6 +50,8 @@ To run this application, you need to register a new OAuth application on GitHub:
     cp env.example .env
     ```
     Populate the `.env` file with your GitHub App credentials and test organization/team details.
+    
+    Also configure the Redis URL from the docker image (leave as is if default was used) and the API tokens that should be allowed for authentication requests.
 3.  **Run a local valkey:**
     ```bash
     docker run --rm -p6379:6379 --name some-valkey valkey/valkey
