@@ -5,6 +5,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Protected Area</title>
+  <style>
+    form {
+      display: inline-block;
+    }
+  </style>
 </head>
 
 <body>
@@ -12,24 +17,38 @@
 
   <p>Welcome, <strong>{{ username }}</strong>!</p>
 
-  <div style="margin-top: 20px;">
+  {% macro render_view_key_box(item_key, v_key_opt, current_val_opt) %}
+  {% if let Some(v_key) = v_key_opt %}
+  {% if v_key == item_key %}
+  <div class="key-details">
+    <h4>Value for: {{ item_key }}</h4>
+    <pre>{{ current_val_opt.as_deref().unwrap_or("null") }}</pre>
+  </div>
+  {% endif %}
+  {% endif %}
+  {% endmacro %}
+
+  <div>
     <h3>Pending (Unauthorized)</h3>
     <ul>
       {% for key in unauthorized_keys %}
-      <li style="display: flex; align-items: center; justify-content: space-between; width: 400px; padding: 5px 0;">
-        <a href="/ops/auth?view_key={{ key }}">{{ key }}</a>
-        <form action="/ops/approve" method="POST" style="margin: 0;">
-          <input type="hidden" name="key" value="{{ key }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit"
-            style="background-color: lightgreen; border: 1px solid green; padding: 2px 5px; cursor: pointer;">Approve</button>
-        </form>
-        <form action="/ops/reject" method="POST" style="margin: 0; margin-left: 5px;">
-          <input type="hidden" name="key" value="{{ key }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit"
-            style="background-color: #ffcccc; border: 1px solid red; padding: 2px 5px; cursor: pointer;">Reject</button>
-        </form>
+      <li>
+        <div>
+          <a href="/ops/auth?view_key={{ key }}">{{ key }}</a>
+          <div>
+            <form action="/ops/approve" method="POST">
+              <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit">Approve</button>
+            </form>
+            <form action="/ops/reject" method="POST">
+              <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit">Reject</button>
+            </form>
+          </div>
+        </div>
+        {{ render_view_key_box(key, view_key, current_value) }}
       </li>
       {% endfor %}
     </ul>
@@ -38,21 +57,19 @@
     <ul>
       {% for key in authorized_keys %}
       <li>
-        <a href="/ops/auth?view_key={{ key }}">{{ key }}</a>
+        <div>
+          <a href="/ops/auth?view_key={{ key }}">{{ key }}</a>
+        </div>
+        {{ render_view_key_box(key, view_key, current_value) }}
       </li>
       {% endfor %}
     </ul>
   </div>
 
-  {% if let Some(key) = view_key %}
-  <div style="margin-top: 20px; border: 1px solid #ccc; padding: 10px;">
-    <h3>Value for: {{ key }}</h3>
-    <pre>{{ current_value.as_deref().unwrap_or("null") }}</pre>
+  <div>
+    <a href="/" class="back-link">&larr; Back to Home</a>
+    <a href="/ops/logout" class="back-link">Logout</a>
   </div>
-  {% endif %}
-
-  <a href="/" class="back-link">&larr; Back to Home</a>
-  <a href="/ops/logout" class="back-link" style="margin-left: 15px; color: red;">Logout</a>
 </body>
 
 </html>
