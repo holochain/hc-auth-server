@@ -214,6 +214,9 @@ pub async fn ops_logout(
     // To remove, we generally just remove the cooking or overwrite with max-age 0
     let mut cookie = tower_cookies::Cookie::new("user_session", "");
     cookie.set_path("/");
+    if state.config.production {
+        cookie.set_secure(true);
+    }
     signed_cookies.remove(cookie);
 
     Redirect::to("/")
@@ -241,7 +244,8 @@ pub async fn ops_oauth_login(
     )
     .set_redirect_uri(
         RedirectUrl::new(format!(
-            "http://{}:{}/ops-oauth-callback",
+            "{}://{}:{}/ops-oauth-callback",
+            if state.config.production { "https" } else { "http" },
             state.config.host, state.config.port
         ))
         .expect("Invalid redirect URL"),
@@ -275,6 +279,9 @@ pub async fn ops_oauth_login(
     let mut cookie = Cookie::new("csrf_id", csrf_id.clone());
     cookie.set_path("/");
     cookie.set_http_only(true);
+    if state.config.production {
+        cookie.set_secure(true);
+    }
     let key = tower_cookies::Key::from(&state.config.session_secret);
     cookies.signed(&key).add(cookie);
 
@@ -304,7 +311,8 @@ pub async fn ops_oauth_callback(
     )
     .set_redirect_uri(
         RedirectUrl::new(format!(
-            "http://{}:{}/ops-oauth-callback",
+            "{}://{}:{}/ops-oauth-callback",
+            if state.config.production { "https" } else { "http" },
             state.config.host, state.config.port
         ))
         .expect("Invalid redirect URL"),
@@ -367,6 +375,9 @@ pub async fn ops_oauth_callback(
                             Cookie::new("user_session", user.login);
                         cookie.set_path("/");
                         cookie.set_http_only(true);
+                        if state.config.production {
+                            cookie.set_secure(true);
+                        }
 
                         let key =
                             tower_cookies::Key::from(&state.config.session_secret);

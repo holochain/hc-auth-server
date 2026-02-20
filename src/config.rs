@@ -19,6 +19,8 @@ pub struct Config {
 
     /// Number of seconds to allow for clock skew between the server and the client
     pub drift_secs: f64,
+
+    pub production: bool,
 }
 
 impl Config {
@@ -51,6 +53,10 @@ impl Config {
             drift_secs: env::var("DRIFT_SECS")
                 .unwrap_or_else(|_| "300.0".to_string()) // 5 minutes
                 .parse()?,
+            production: env::var("PRODUCTION")
+                .unwrap_or_else(|_| "false".to_string())
+                .parse()
+                .unwrap_or(false),
         })
     }
 }
@@ -81,5 +87,22 @@ mod tests {
         let config = Config::from_env().unwrap();
         assert!(config.api_tokens.is_empty());
         unsafe { env::remove_var("API_TOKENS") };
+    }
+
+    #[test]
+    fn test_production_flag() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        unsafe { env::set_var("PRODUCTION", "true") };
+        let config = Config::from_env().unwrap();
+        assert!(config.production);
+
+        unsafe { env::set_var("PRODUCTION", "false") };
+        let config = Config::from_env().unwrap();
+        assert!(!config.production);
+
+        unsafe { env::remove_var("PRODUCTION") };
+        let config = Config::from_env().unwrap();
+        assert!(!config.production);
     }
 }

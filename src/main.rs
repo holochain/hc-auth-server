@@ -42,6 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::from_env().expect("Failed to load configuration");
     let port = config.port;
     let host = config.host.clone();
+    let production = config.production;
 
     // Initialize Storage
     let storage = Storage::new(&config).expect("Failed to initialize storage");
@@ -108,7 +109,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let addr = format!("{}:{}", host, port);
     let listener = TcpListener::bind(&addr).await?;
-    tracing::info!("listening on http://{}", addr);
+    let protocol = if production { "https" } else { "http" };
+    tracing::info!("listening on {}://{}", protocol, addr);
 
     axum::serve(listener, app).await?;
 
