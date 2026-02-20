@@ -94,9 +94,9 @@ pub async fn ops_auth(
         };
 
         let authorized_map =
-            state.storage.get_authorized_requests().unwrap_or_default();
+            state.storage.get_authorized_requests().await.unwrap_or_default();
         let pending_map =
-            state.storage.get_pending_requests().unwrap_or_default();
+            state.storage.get_pending_requests().await.unwrap_or_default();
 
         let mut authorized_keys: Vec<String> =
             authorized_map.keys().cloned().collect();
@@ -168,7 +168,7 @@ pub async fn ops_approve(
         return Redirect::to("/").into_response();
     }
 
-    if let Err(e) = state.storage.approve_request(&form.key) {
+    if let Err(e) = state.storage.approve_request(&form.key).await {
         tracing::error!("Failed to approve request: {}", e);
     }
 
@@ -198,7 +198,7 @@ pub async fn ops_reject(
         return Redirect::to("/").into_response();
     }
 
-    if let Err(e) = state.storage.delete_request(&form.key) {
+    if let Err(e) = state.storage.delete_request(&form.key).await {
         tracing::error!("Failed to reject request: {}", e);
     }
 

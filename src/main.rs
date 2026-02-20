@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let production = config.production;
 
     // Initialize Storage
-    let storage = Storage::new(&config).expect("Failed to initialize storage");
+    let storage = Storage::new(&config).await.expect("Failed to initialize storage");
 
     let http_client = reqwest::Client::new();
 

@@ -1,8 +1,8 @@
 use crate::config::Config;
 use base64::prelude::*;
 use rand::RngCore;
-use redis::cluster::ClusterClient;
-use redis::{Client, RedisResult, Script};
+use redis::aio::ConnectionManager;
+use redis::{RedisResult, Script};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -90,8 +90,8 @@ fn now_secs() -> String {
     (now() as u64).to_string()
 }
 
-fn redis_add_pending(
-    con: &mut dyn redis::ConnectionLike,
+async fn redis_add_pending(
+    con: &mut impl redis::aio::ConnectionLike,
     key: &str,
     state: State,
     json: &str,
@@ -104,11 +104,12 @@ fn redis_add_pending(
         .arg(json)
         .arg(now_secs())
         .arg(max_pending)
-        .invoke(con)
+        .invoke_async(con)
+        .await
 }
 
-fn redis_transition(
-    con: &mut dyn redis::ConnectionLike,
+async fn redis_transition(
+    con: &mut impl redis::aio::ConnectionLike,
     key: &str,
     from_state: State,
     to_state: State
@@ -121,17 +122,19 @@ fn redis_transition(
         .arg(from_state.as_str())
         .arg(to_state.as_str())
         .arg(now_secs())
-        .invoke(con)
+        .invoke_async(con)
+        .await
 }
 
-fn redis_delete(
-    con: &mut dyn redis::ConnectionLike,
+async fn redis_delete(
+    con: &mut impl redis::aio::ConnectionLike,
     key: &str,
 ) -> RedisResult<()> {
     lua_delete()
         .key(auth_key(key))
         .arg(key)
-        .invoke(con)
+        .invoke_async(con)
+        .await
 }
 
 // END NEW REDIS API
@@ -142,8 +145,8 @@ pub struct ObjectRecord {
     pub json: String,
 }
 
-pub fn redis_get_object(
-    con: &mut dyn redis::ConnectionLike,
+pub async fn redis_get_object(
+    con: &mut impl redis::aio::ConnectionLike,
     key: &str,
 ) -> redis::RedisResult<Option<ObjectRecord>> {
     let key = auth_key(key);
@@ -152,7 +155,8 @@ pub fn redis_get_object(
         .arg(&key)
         .arg("state")
         .arg("json")
-        .query(con)?;
+        .query_async(con)
+        .await?;
 
     match (state.and_then(|s| State::from_str(&s)), json) {
         (Some(state), Some(json)) => Ok(Some(ObjectRecord { state, json })),
@@ -178,122 +182,111 @@ pub fn redis_list_all_keys(
 }
 */
 
-pub enum RedisClient {
-    Standalone(Client),
-    Cluster(ClusterClient),
-}
 
 pub struct Storage {
-    client: RedisClient,
+    connection_manager: ConnectionManager,
     max_pending_requests: usize,
 }
 
 impl Storage {
-    pub fn new(config: &Config) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(config: &Config) -> Result<Self, Box<dyn std::error::Error>> {
         let max_pending_requests = config.max_pending_requests;
-        if let Some(nodes) = &config.redis_cluster_nodes {
-            let nodes: Vec<&str> = nodes.split(',').collect();
-            let client = ClusterClient::new(nodes)?;
+        if let Some(url) = &config.redis_url {
+            let client = redis::Client::open(url.as_str())?;
+            let connection_manager = ConnectionManager::new(client).await?;
             Ok(Self {
-                client: RedisClient::Cluster(client),
-                max_pending_requests,
-            })
-        } else if let Some(url) = &config.redis_url {
-            let client = Client::open(url.as_str())?;
-            Ok(Self {
-                client: RedisClient::Standalone(client),
+                connection_manager,
                 max_pending_requests,
             })
         } else {
-            Err("Redis configuration missing (REDIS_URL or REDIS_CLUSTER_NODES)".into())
+            Err("Redis configuration missing (REDIS_URL)".into())
         }
     }
 
-    fn with_connection<F, T>(
+    async fn with_connection<F, Fut, T>(
         &self,
         mut f: F,
     ) -> Result<T, StorageErr>
     where
-        F: FnMut(&mut dyn redis::ConnectionLike) -> Result<T, StorageErr>,
+        F: FnMut(ConnectionManager) -> Fut,
+        Fut: std::future::Future<Output = Result<T, StorageErr>>,
     {
-        match &self.client {
-            RedisClient::Standalone(client) => {
-                let mut con = client.get_connection()?;
-                f(&mut con)
-            }
-            RedisClient::Cluster(client) => {
-                let mut con = client.get_connection()?;
-                f(&mut con)
-            }
-        }
+        f(self.connection_manager.clone()).await
     }
 
-    pub fn add_pending_request(
+    pub async fn add_pending_request(
         &self,
         key: &str,
         data: &Value,
     ) -> Result<(), StorageErr> {
         let json_str = serde_json::to_string(data).map_err(StorageErr::other)?;
 
-        self.with_connection(|con| {
-            redis_add_pending(con, key, State::Pending, &json_str, self.max_pending_requests)
-                .map_err(|e| {
-                    if e.to_string().contains("limit_reached") {
-                        StorageErr::TooManyPendingRequests
-                    } else {
-                        e.into()
-                    }
-                })?;
-            Ok(())
-        })
+        self.with_connection(|mut con| {
+            let json_str = json_str.clone();
+            async move {
+                redis_add_pending(&mut con, key, State::Pending, &json_str, self.max_pending_requests)
+                    .await
+                    .map_err(|e| {
+                        if e.to_string().contains("limit_reached") {
+                            StorageErr::TooManyPendingRequests
+                        } else {
+                            e.into()
+                        }
+                    })?;
+                Ok(())
+            }
+        }).await
     }
 
-    pub fn approve_request(
+    pub async fn approve_request(
         &self,
         key: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        self.with_connection(|con| {
-            redis_transition(con, key, State::Pending, State::Authorized)?;
+        self.with_connection(|mut con| async move {
+            redis_transition(&mut con, key, State::Pending, State::Authorized).await?;
             Ok(())
         })
+        .await
         .map_err(Into::into)
     }
 
-    pub fn delete_request(
+    pub async fn delete_request(
         &self,
         key: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        self.with_connection(|con| {
-            redis_delete(con, key)?;
+        self.with_connection(|mut con| async move {
+            redis_delete(&mut con, key).await?;
             Ok(())
         })
+        .await
         .map_err(Into::into)
     }
 
-    pub fn get_pending_requests(
+    pub async fn get_pending_requests(
         &self,
     ) -> Result<HashMap<String, Value>, Box<dyn std::error::Error>> {
-        self.get_all_by_state(State::Pending)
+        self.get_all_by_state(State::Pending).await
     }
 
-    pub fn get_authorized_requests(
+    pub async fn get_authorized_requests(
         &self,
     ) -> Result<HashMap<String, Value>, Box<dyn std::error::Error>> {
-        self.get_all_by_state(State::Authorized)
+        self.get_all_by_state(State::Authorized).await
     }
 
-    fn get_all_by_state(
+    async fn get_all_by_state(
         &self,
         state: State,
     ) -> Result<HashMap<String, Value>, Box<dyn std::error::Error>> {
-        self.with_connection(|con| {
+        self.with_connection(|mut con| async move {
             let keys: Vec<String> = redis::cmd("SMEMBERS")
                 .arg(state_key(state))
-                .query(con)?;
+                .query_async(&mut con)
+                .await?;
 
             let mut result = HashMap::new();
             for key in keys {
-                if let Some(record) = redis_get_object(con, &key)? {
+                if let Some(record) = redis_get_object(&mut con, &key).await? {
                     let val: Value = serde_json::from_str(&record.json)
                         .unwrap_or(Value::String(record.json));
                     result.insert(key, val);
@@ -301,15 +294,16 @@ impl Storage {
             }
             Ok(result)
         })
+        .await
         .map_err(Into::into)
     }
 
-    pub fn authenticate_key(
+    pub async fn authenticate_key(
         &self,
         key: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-        self.with_connection(|con| {
-            if let Some(record) = redis_get_object(con, key)? {
+        self.with_connection(|mut con| async move {
+            if let Some(record) = redis_get_object(&mut con, key).await? {
                 if record.state != State::Authorized {
                     return Ok(None);
                 }
@@ -356,7 +350,8 @@ impl Storage {
                         .arg(new_json_str)
                         .arg("updated")
                         .arg(now)
-                        .query(con)?;
+                        .query_async(&mut con)
+                        .await?;
 
                     Ok(Some(token))
                 } else {
@@ -366,6 +361,7 @@ impl Storage {
                 Ok(None)
             }
         })
+        .await
         .map_err(Into::into)
     }
 }

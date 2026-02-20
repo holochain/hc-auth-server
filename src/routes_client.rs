@@ -45,7 +45,7 @@ pub async fn request_auth(
         "payload": payload,
     });
 
-    match state.storage.add_pending_request(&key, &payload) {
+    match state.storage.add_pending_request(&key, &payload).await {
         Err(StorageErr::TooManyPendingRequests) => {
             return (
                 axum::http::StatusCode::TOO_MANY_REQUESTS,
@@ -108,7 +108,7 @@ pub async fn authenticate(
         } else {
             return axum::http::StatusCode::UNAUTHORIZED.into_response();
         }
-        match state.storage.authenticate_key(pub_key) {
+        match state.storage.authenticate_key(pub_key).await {
             Ok(Some(token)) => {
                 let resp = serde_json::json!({ "authToken": token });
                 (

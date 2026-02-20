@@ -14,7 +14,7 @@ pub async fn api_list_pending(
         return axum::http::StatusCode::UNAUTHORIZED.into_response();
     }
 
-    match state.storage.get_pending_requests() {
+    match state.storage.get_pending_requests().await {
         Ok(pending) => {
             let keys: Vec<String> = pending.keys().cloned().collect();
             Json(keys).into_response()
@@ -35,7 +35,7 @@ pub async fn api_get_pending(
         return axum::http::StatusCode::UNAUTHORIZED.into_response();
     }
 
-    match state.storage.get_pending_requests() {
+    match state.storage.get_pending_requests().await {
         Ok(pending) => {
             if let Some(data) = pending.get(&key) {
                 Json(data).into_response()
@@ -59,7 +59,7 @@ pub async fn api_approve_pending(
         return axum::http::StatusCode::UNAUTHORIZED.into_response();
     }
 
-    match state.storage.approve_request(&key) {
+    match state.storage.approve_request(&key).await {
         Ok(_) => axum::http::StatusCode::OK.into_response(),
         Err(e) => {
             tracing::error!("Failed to approve request: {}", e);
@@ -77,7 +77,7 @@ pub async fn api_reject_pending(
         return axum::http::StatusCode::UNAUTHORIZED.into_response();
     }
 
-    match state.storage.delete_request(&key) {
+    match state.storage.delete_request(&key).await {
         Ok(_) => axum::http::StatusCode::OK.into_response(),
         Err(e) => {
             tracing::error!("Failed to reject request: {}", e);

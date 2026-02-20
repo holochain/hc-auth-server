@@ -13,7 +13,6 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     pub redis_url: Option<String>,
-    pub redis_cluster_nodes: Option<String>,
     pub max_pending_requests: usize,
     pub api_tokens: HashSet<String>,
 
@@ -40,7 +39,6 @@ impl Config {
                 .unwrap_or_else(|_| "3000".to_string())
                 .parse()?,
             redis_url: env::var("REDIS_URL").ok(),
-            redis_cluster_nodes: env::var("REDIS_CLUSTER_NODES").ok(),
             max_pending_requests: env::var("MAX_PENDING_REQUESTS")
                 .unwrap_or_else(|_| "10".to_string())
                 .parse()?,

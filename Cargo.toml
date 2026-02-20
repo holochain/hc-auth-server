@@ -12,7 +12,7 @@ reqwest = { version = "0.13.1", features = ["json"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 tokio = { version = "1.49.0", features = ["full"] }
-redis = { version = "0.32.7", features = ["tokio-comp", "cluster"] }
+redis = { version = "0.32.7", features = ["tokio-comp", "connection-manager"] }
 tower-cookies = { version = "0.11.0", features = ["signed"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
