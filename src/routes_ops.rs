@@ -1,8 +1,21 @@
 use askama::Template;
 use axum::{
+    Router,
     extract::{Form, Query, State},
     response::{Html, IntoResponse, Redirect},
+    routing::{get, post},
 };
+
+pub fn router() -> Router<SharedState> {
+    Router::new()
+        .route("/", get(ops_home))
+        .route("/ops/auth", get(ops_auth))
+        .route("/ops/approve", post(ops_approve))
+        .route("/ops/reject", post(ops_reject))
+        .route("/ops/logout", get(ops_logout))
+        .route("/ops/oauth-login", get(ops_oauth_login))
+        .route("/ops/oauth-callback", get(ops_oauth_callback))
+}
 use oauth2::{
     AuthUrl, AuthorizationCode, CsrfToken, PkceCodeChallenge, RedirectUrl,
     Scope, TokenResponse, TokenUrl, basic::BasicClient,

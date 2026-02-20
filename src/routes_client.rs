@@ -2,12 +2,20 @@ use crate::now;
 use crate::state::AppState as SharedState;
 use crate::storage::StorageErr;
 use axum::{
-    Json,
+    Json, Router,
     body::Bytes,
     extract::{Path, State},
     http::HeaderMap,
     response::IntoResponse,
+    routing::get,
 };
+
+pub fn router() -> Router<SharedState> {
+    Router::new()
+        .route("/now", get(now_handler))
+        .route("/request-auth/{key}", axum::routing::put(request_auth))
+        .route("/authenticate", axum::routing::put(authenticate))
+}
 use base64::prelude::*;
 use ed25519_dalek::{Signature, VerifyingKey};
 

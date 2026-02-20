@@ -1,7 +1,4 @@
-use axum::{
-    Router,
-    routing::{get, post},
-};
+use axum::Router;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
@@ -87,29 +84,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Build our application with a route
     let app = Router::new()
-        // These first three routes are "Client" routes to be used by end-user applications.
-        .route("/now", get(routes_client::now_handler))
-        .route(
-            "/request-auth/{key}",
-            axum::routing::put(routes_client::request_auth),
+        .merge(routes_client::router())
+        .merge(routes_ops::router())
+        .nest(
+            "/api",
+            routes_api::router().layer(axum::middleware::from_fn_with_state(
+                state.clone(),
+                routes_api::api_auth,
+            )),
         )
-        .route(
-            "/authenticate",
-            axum::routing::put(routes_client::authenticate),
-        )
-        // These next routes are "Ops" routes for managing the auth server.
-        .route("/", get(routes_ops::ops_home))
-        .route("/ops/auth", get(routes_ops::ops_auth))
-        .route("/ops/approve", post(routes_ops::ops_approve))
-        .route("/ops/reject", post(routes_ops::ops_reject))
-        .route("/ops/logout", get(routes_ops::ops_logout))
-        .route("/ops/oauth-login", get(routes_ops::ops_oauth_login))
-        .route("/ops/oauth-callback", get(routes_ops::ops_oauth_callback))
-        // These next routes are "API" routes for automated processes managing the auth server.
-        .route("/api/list", get(routes_api::api_list_pending))
-        .route("/api/get/{key}", get(routes_api::api_get_pending))
-        .route("/api/approve/{key}", post(routes_api::api_approve_pending))
-        .route("/api/reject/{key}", post(routes_api::api_reject_pending))
         // Finally some middleware to handle cookies, and the shared state.
         .layer(CookieManagerLayer::new())
         .with_state(state);
