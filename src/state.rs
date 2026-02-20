@@ -2,7 +2,6 @@ use crate::config::Config;
 use crate::storage::Storage;
 use oauth2::{CsrfToken, PkceCodeVerifier};
 use std::collections::HashMap;
-use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -24,12 +23,4 @@ pub struct AppState {
     pub http_client: reqwest::Client,
     pub pending_auth: Arc<Mutex<HashMap<String, PendingAuth>>>,
     pub csrf_tokens: Arc<Mutex<HashMap<String, CsrfTokenEntry>>>,
-}
-
-impl Deref for AppState {
-    type Target = Config;
-
-    fn deref(&self) -> &Self::Target {
-        &self.config
-    }
 }

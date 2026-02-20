@@ -92,7 +92,7 @@ fn check_api_token(headers: &HeaderMap, state: &SharedState) -> bool {
         if let Ok(auth_str) = auth_value.to_str() {
             if auth_str.starts_with("Bearer ") {
                 let token = &auth_str[7..];
-                return state.api_tokens.contains(token);
+                return state.config.api_tokens.contains(token);
             }
         }
     }

@@ -48,7 +48,7 @@ pub async fn ops_home(
     cookies: Cookies,
     State(state): State<SharedState>,
 ) -> impl IntoResponse {
-    let key = tower_cookies::Key::from(&state.session_secret);
+    let key = tower_cookies::Key::from(&state.config.session_secret);
     let signed_cookies = cookies.signed(&key);
     let user_session = signed_cookies.get("user_session");
 
@@ -73,7 +73,7 @@ pub async fn ops_auth(
     State(state): State<SharedState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let key = tower_cookies::Key::from(&state.session_secret);
+    let key = tower_cookies::Key::from(&state.config.session_secret);
     let signed_cookies = cookies.signed(&key);
 
     if let Some(cookie) = signed_cookies.get("user_session") {
@@ -150,7 +150,7 @@ pub async fn ops_approve(
     cookies: Cookies,
     Form(form): Form<ApproveRequest>,
 ) -> impl IntoResponse {
-    let key = tower_cookies::Key::from(&state.session_secret);
+    let key = tower_cookies::Key::from(&state.config.session_secret);
     let signed_cookies = cookies.signed(&key);
 
     if let Some(cookie) = signed_cookies.get("user_session") {
@@ -180,7 +180,7 @@ pub async fn ops_reject(
     cookies: Cookies,
     Form(form): Form<ApproveRequest>,
 ) -> impl IntoResponse {
-    let key = tower_cookies::Key::from(&state.session_secret);
+    let key = tower_cookies::Key::from(&state.config.session_secret);
     let signed_cookies = cookies.signed(&key);
 
     if let Some(cookie) = signed_cookies.get("user_session") {
@@ -209,7 +209,7 @@ pub async fn ops_logout(
     cookies: Cookies,
     State(state): State<SharedState>,
 ) -> impl IntoResponse {
-    let key = tower_cookies::Key::from(&state.session_secret);
+    let key = tower_cookies::Key::from(&state.config.session_secret);
     let signed_cookies = cookies.signed(&key);
     // To remove, we generally just remove the cooking or overwrite with max-age 0
     let mut cookie = tower_cookies::Cookie::new("user_session", "");
@@ -223,8 +223,8 @@ pub async fn ops_oauth_login(
     cookies: Cookies,
     State(state): State<SharedState>,
 ) -> impl IntoResponse {
-    let client_id = state.github_client_id.clone();
-    let client_secret = state.github_client_secret.clone();
+    let client_id = state.config.github_client_id.clone();
+    let client_secret = state.config.github_client_secret.clone();
     let auth_url =
         AuthUrl::new("https://github.com/login/oauth/authorize".to_string())
             .expect("Invalid authorization endpoint URL");
@@ -242,7 +242,7 @@ pub async fn ops_oauth_login(
     .set_redirect_uri(
         RedirectUrl::new(format!(
             "http://{}:{}/ops-oauth-callback",
-            state.host, state.port
+            state.config.host, state.config.port
         ))
         .expect("Invalid redirect URL"),
     );
@@ -272,10 +272,10 @@ pub async fn ops_oauth_login(
     }
 
     // Set csrf_id cookie
-    let mut cookie = Cookie::new("csrf_id", csrf_id);
+    let mut cookie = Cookie::new("csrf_id", csrf_id.clone());
     cookie.set_path("/");
     cookie.set_http_only(true);
-    let key = tower_cookies::Key::from(&state.session_secret);
+    let key = tower_cookies::Key::from(&state.config.session_secret);
     cookies.signed(&key).add(cookie);
 
     Redirect::to(auth_url.as_str())
@@ -286,8 +286,8 @@ pub async fn ops_oauth_callback(
     cookies: Cookies,
     Query(query): Query<AuthRequest>,
 ) -> impl IntoResponse {
-    let client_id = state.github_client_id.clone();
-    let client_secret = state.github_client_secret.clone();
+    let client_id = state.config.github_client_id.clone();
+    let client_secret = state.config.github_client_secret.clone();
     let auth_url =
         AuthUrl::new("https://github.com/login/oauth/authorize".to_string())
             .expect("Invalid authorization endpoint URL");
@@ -305,13 +305,13 @@ pub async fn ops_oauth_callback(
     .set_redirect_uri(
         RedirectUrl::new(format!(
             "http://{}:{}/ops-oauth-callback",
-            state.host, state.port
+            state.config.host, state.config.port
         ))
         .expect("Invalid redirect URL"),
     );
 
     // Verify CSRF state and PKCE verifier
-    let key = tower_cookies::Key::from(&state.session_secret);
+    let key = tower_cookies::Key::from(&state.config.session_secret);
     let signed_cookies = cookies.signed(&key);
     let csrf_id = match signed_cookies.get("csrf_id") {
         Some(c) => c.value().to_string(),
@@ -357,7 +357,7 @@ pub async fn ops_oauth_callback(
 
             // Check team membership
             match gh_client
-                .is_team_member(&state.github_org, &state.github_team)
+                .is_team_member(&state.config.github_org, &state.config.github_team)
                 .await
             {
                 Ok(true) => {
@@ -369,7 +369,7 @@ pub async fn ops_oauth_callback(
                         cookie.set_http_only(true);
 
                         let key =
-                            tower_cookies::Key::from(&state.session_secret);
+                            tower_cookies::Key::from(&state.config.session_secret);
                         cookies.signed(&key).add(cookie);
                         tracing::info!(
                             "User authenticated and verified in team."
@@ -389,12 +389,12 @@ pub async fn ops_oauth_callback(
                         let org_teams: Vec<_> = teams
                             .iter()
                             .filter(|t| {
-                                t.organization.login == state.github_org
+                                t.organization.login == state.config.github_org
                             })
                             .collect();
                         tracing::debug!(
                             "DEBUG: Teams found in org '{}': {:?}",
-                            state.github_org,
+                            state.config.github_org,
                             org_teams
                         );
                     } else {
