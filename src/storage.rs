@@ -31,6 +31,7 @@ pub enum StorageErr {
 }
 
 impl StorageErr {
+    /// Wraps an arbitrary error into a `StorageErr::Other`.
     pub fn other<E: Into<Box<dyn std::error::Error>>>(e: E) -> Self {
         Self::Other(e.into())
     }
@@ -45,6 +46,7 @@ pub enum State {
 }
 
 impl State {
+    /// Parses a string into a `State`.
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             STATE_PENDING => Some(Self::Pending),
@@ -54,6 +56,7 @@ impl State {
         }
     }
 
+    /// Returns the string representation of the `State`.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Pending => STATE_PENDING,
@@ -63,33 +66,40 @@ impl State {
     }
 }
 
+/// Loads and caches the Lua script for adding a pending request.
 fn lua_add_pending() -> &'static Script {
     static ADD_PENDING: OnceLock<Script> = OnceLock::new();
     ADD_PENDING.get_or_init(|| Script::new(include_str!("add_pending.lua")))
 }
 
+/// Loads and caches the Lua script for transitioning a request between states.
 fn lua_transition() -> &'static Script {
     static TRANSITION: OnceLock<Script> = OnceLock::new();
     TRANSITION.get_or_init(|| Script::new(include_str!("transition.lua")))
 }
 
+/// Loads and caches the Lua script for deleting a request.
 fn lua_delete() -> &'static Script {
     static DELETE: OnceLock<Script> = OnceLock::new();
     DELETE.get_or_init(|| Script::new(include_str!("delete.lua")))
 }
 
+/// Formats the Redis key for an authentication record.
 fn auth_key(id: &str) -> String {
     format!("auth:{id}")
 }
 
+/// Formats the Redis key for a set of IDs in a given state.
 fn state_key(state: State) -> String {
     format!("state:{}", state.as_str())
 }
 
+/// Returns the current time in seconds as a string.
 fn now_secs() -> String {
     (now() as u64).to_string()
 }
 
+/// Internal helper to execute the `add_pending` Lua script.
 async fn redis_add_pending(
     con: &mut impl redis::aio::ConnectionLike,
     key: &str,
@@ -108,6 +118,7 @@ async fn redis_add_pending(
         .await
 }
 
+/// Internal helper to execute the `transition` Lua script.
 async fn redis_transition(
     con: &mut impl redis::aio::ConnectionLike,
     key: &str,
@@ -126,6 +137,7 @@ async fn redis_transition(
         .await
 }
 
+/// Internal helper to execute the `delete` Lua script.
 async fn redis_delete(
     con: &mut impl redis::aio::ConnectionLike,
     key: &str,
@@ -145,6 +157,7 @@ pub struct ObjectRecord {
     pub json: String,
 }
 
+/// Fetches the state and JSON data for a specific authentication key.
 pub async fn redis_get_object(
     con: &mut impl redis::aio::ConnectionLike,
     key: &str,
@@ -188,6 +201,9 @@ pub struct Storage {
 }
 
 impl Storage {
+    /// Creates a new Storage instance using the provided configuration.
+    ///
+    /// Initializes a Redis connection manager. Returns an error if Redis is not configured or reachable.
     pub async fn new(
         config: &Config,
     ) -> Result<Self, Box<dyn std::error::Error>> {
@@ -204,6 +220,7 @@ impl Storage {
         }
     }
 
+    /// Helper to execute an async closure with a cloned connection manager.
     async fn with_connection<F, Fut, T>(
         &self,
         mut f: F,
@@ -215,6 +232,10 @@ impl Storage {
         f(self.connection_manager.clone()).await
     }
 
+    /// Adds a new authentication request to the pending set.
+    ///
+    /// The `key` is typically the public key. `data` is the associated metadata.
+    /// Returns an error if the maximum number of pending requests has been reached.
     pub async fn add_pending_request(
         &self,
         key: &str,
@@ -247,6 +268,7 @@ impl Storage {
         .await
     }
 
+    /// Transitions a pending request to the authorized state.
     pub async fn approve_request(
         &self,
         key: &str,
@@ -260,6 +282,7 @@ impl Storage {
         .map_err(Into::into)
     }
 
+    /// Deletes an authentication request from storage.
     pub async fn delete_request(
         &self,
         key: &str,
@@ -272,18 +295,21 @@ impl Storage {
         .map_err(Into::into)
     }
 
+    /// Returns a map of all currently pending authentication requests.
     pub async fn get_pending_requests(
         &self,
     ) -> Result<HashMap<String, Value>, Box<dyn std::error::Error>> {
         self.get_all_by_state(State::Pending).await
     }
 
+    /// Returns a map of all currently authorized authentication keys.
     pub async fn get_authorized_requests(
         &self,
     ) -> Result<HashMap<String, Value>, Box<dyn std::error::Error>> {
         self.get_all_by_state(State::Authorized).await
     }
 
+    /// Internal helper to fetch all records in a specific state.
     async fn get_all_by_state(
         &self,
         state: State,
@@ -308,6 +334,9 @@ impl Storage {
         .map_err(Into::into)
     }
 
+    /// Validates an authorized key and returns an authentication token.
+    ///
+    /// If successful, updates the `lastAccess` timestamp and generates a new `authToken` if one doesn't exist.
     pub async fn authenticate_key(
         &self,
         key: &str,

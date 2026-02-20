@@ -8,6 +8,7 @@ use axum::{
     routing::{get, post},
 };
 
+/// Returns the router for the `/api` prefix.
 pub fn router() -> Router<SharedState> {
     Router::new()
         .route("/list", get(api_list_pending))
@@ -16,6 +17,7 @@ pub fn router() -> Router<SharedState> {
         .route("/reject/{key}", post(api_reject_pending))
 }
 
+/// Middleware to authenticate API requests using a Bearer token.
 pub async fn api_auth(
     State(state): State<SharedState>,
     request: axum::extract::Request,
@@ -27,6 +29,7 @@ pub async fn api_auth(
     next.run(request).await
 }
 
+/// GET /api/list - Lists all pending authentication request keys.
 pub async fn api_list_pending(
     State(state): State<SharedState>,
 ) -> impl IntoResponse {
@@ -43,6 +46,7 @@ pub async fn api_list_pending(
     }
 }
 
+/// GET /api/get/{key} - Retrieves raw JSON data for a specific pending request.
 pub async fn api_get_pending(
     State(state): State<SharedState>,
     Path(key): Path<String>,
@@ -62,6 +66,7 @@ pub async fn api_get_pending(
     }
 }
 
+/// POST /api/approve/{key} - Approves a pending authentication request.
 pub async fn api_approve_pending(
     State(state): State<SharedState>,
     Path(key): Path<String>,
@@ -75,6 +80,7 @@ pub async fn api_approve_pending(
     }
 }
 
+/// POST /api/reject/{key} - Rejects and deletes a pending authentication request.
 pub async fn api_reject_pending(
     State(state): State<SharedState>,
     Path(key): Path<String>,
@@ -88,6 +94,7 @@ pub async fn api_reject_pending(
     }
 }
 
+/// Validates if the provided headers contain a valid API token.
 fn check_api_token(headers: &HeaderMap, state: &SharedState) -> bool {
     if let Some(auth_value) = headers.get(header::AUTHORIZATION)
         && let Ok(auth_str) = auth_value.to_str()

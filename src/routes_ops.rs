@@ -6,6 +6,7 @@ use axum::{
     routing::{get, post},
 };
 
+/// Returns the router for administrative (Ops) endpoints.
 pub fn router() -> Router<SharedState> {
     Router::new()
         .route("/", get(ops_home))
@@ -27,6 +28,7 @@ use tower_cookies::{Cookie, Cookies};
 use crate::github::GitHubClient;
 use crate::state::AppState as SharedState;
 
+/// Template for the home page.
 #[derive(Template)]
 #[template(path = "home.html")]
 pub struct HomeTemplate {
@@ -35,6 +37,7 @@ pub struct HomeTemplate {
     pub error: Option<String>,
 }
 
+/// Template for the protected dashboard.
 #[derive(Template)]
 #[template(path = "protected.html")]
 pub struct ProtectedTemplate {
@@ -58,6 +61,7 @@ pub struct AuthRequest {
     pub state: String,
 }
 
+/// GET / - Renders the home page.
 pub async fn ops_home(
     cookies: Cookies,
     State(state): State<SharedState>,
@@ -86,6 +90,7 @@ pub async fn ops_home(
     })
 }
 
+/// GET /ops/auth - Renders the dashboard if authenticated.
 pub async fn ops_auth(
     cookies: Cookies,
     State(state): State<SharedState>,
@@ -170,6 +175,7 @@ pub async fn ops_auth(
     }
 }
 
+/// POST /ops/approve - Approves a specific authentication request via form submission.
 pub async fn ops_approve(
     State(state): State<SharedState>,
     cookies: Cookies,
@@ -206,6 +212,7 @@ pub async fn ops_approve(
     Redirect::to("/ops/auth").into_response()
 }
 
+/// POST /ops/reject - Rejects a specific authentication request via form submission.
 pub async fn ops_reject(
     State(state): State<SharedState>,
     cookies: Cookies,
@@ -242,6 +249,7 @@ pub async fn ops_reject(
     Redirect::to("/ops/auth").into_response()
 }
 
+/// GET /ops/logout - Clears the user session cookie and redirects to home.
 pub async fn ops_logout(
     cookies: Cookies,
     State(state): State<SharedState>,
@@ -259,6 +267,7 @@ pub async fn ops_logout(
     Redirect::to("/")
 }
 
+/// GET /ops/oauth-login - Initiates the GitHub OAuth flow.
 pub async fn ops_oauth_login(
     cookies: Cookies,
     State(state): State<SharedState>,
@@ -331,6 +340,9 @@ pub async fn ops_oauth_login(
     Redirect::to(auth_url.as_str())
 }
 
+/// GET /ops/oauth-callback - Handles the GitHub OAuth callback.
+///
+/// Verifies the CSRF state, exchanges the code for a token, and checks team membership.
 pub async fn ops_oauth_callback(
     State(state): State<SharedState>,
     cookies: Cookies,

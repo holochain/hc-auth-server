@@ -16,6 +16,7 @@ use config::Config;
 use state::AppState;
 use storage::Storage;
 
+/// Returns the current unix timestamp in seconds.
 fn now() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -23,6 +24,10 @@ fn now() -> f64 {
         .as_secs_f64()
 }
 
+/// Main entry point for the authentication server.
+///
+/// Initializes configuration, storage, tracing, and starts the Axum web server.
+/// Also spawns a background thread for cleaning up expired tokens.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing

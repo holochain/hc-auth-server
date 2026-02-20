@@ -5,6 +5,12 @@ use serde_json::json;
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Example client that demonstrates the full authentication flow.
+///
+/// 1. Generates an Ed25519 keypair.
+/// 2. Requests authentication from the server.
+/// 3. Uses an API token to list and approve the request (for demonstration).
+/// 4. Signs a challenge from the server to obtain an authentication token.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 0. Parse API token from command-line arguments

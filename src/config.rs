@@ -3,26 +3,42 @@ use oauth2::{ClientId, ClientSecret};
 use std::collections::HashSet;
 use std::env;
 
+/// Configuration for the authentication server.
 #[derive(Clone)]
 pub struct Config {
+    /// GitHub OAuth client ID.
     pub github_client_id: ClientId,
+    /// GitHub OAuth client secret.
     pub github_client_secret: ClientSecret,
+    /// GitHub organization allowed to access the admin interface.
     pub github_org: String,
+    /// GitHub team within the organization allowed to access the admin interface.
     pub github_team: String,
+    /// Secret key used for session cookie encryption.
     pub session_secret: Vec<u8>,
+    /// Host address to bind the server to.
     pub host: String,
+    /// Port number to bind the server to.
     pub port: u16,
+    /// Redis connection URL.
     pub redis_url: Option<String>,
+    /// Maximum number of pending authentication requests allowed in Redis.
     pub max_pending_requests: usize,
+    /// Set of valid API tokens for system administration.
     pub api_tokens: HashSet<String>,
 
-    /// Number of seconds to allow for clock skew between the server and the client
+    /// Number of seconds to allow for clock skew between the server and the client.
     pub drift_secs: f64,
 
+    /// Whether the server is running in production mode (enables HTTPS/Secure cookies).
     pub production: bool,
 }
 
 impl Config {
+    /// Loads configuration from environment variables.
+    ///
+    /// Reads from `.env` file if present, then environment variables.
+    /// Returns an error if any required variable is missing or invalid.
     pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
         dotenv().ok();
 

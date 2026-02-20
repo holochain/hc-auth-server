@@ -10,6 +10,7 @@ use axum::{
     routing::get,
 };
 
+/// Returns the router for client-facing endpoints.
 pub fn router() -> Router<SharedState> {
     Router::new()
         .route("/now", get(now_handler))
@@ -19,6 +20,9 @@ pub fn router() -> Router<SharedState> {
 use base64::prelude::*;
 use ed25519_dalek::{Signature, VerifyingKey};
 
+/// GET /now - Returns the current server time and a random nonce, base64url encoded.
+///
+/// Used by clients to construct a signed payload for authentication.
 pub async fn now_handler() -> impl IntoResponse {
     use rand::prelude::*;
 
@@ -38,6 +42,9 @@ pub async fn now_handler() -> impl IntoResponse {
     BASE64_URL_SAFE_NO_PAD.encode(buf).into_response()
 }
 
+/// PUT /request-auth/{key} - Registers a new pending authentication request.
+///
+/// `key` should be the base64url encoded public key. The request body should be a JSON object with metadata.
 pub async fn request_auth(
     State(state): State<SharedState>,
     Path(key): Path<String>,
@@ -75,6 +82,10 @@ pub async fn request_auth(
     (axum::http::StatusCode::OK, "OK").into_response()
 }
 
+/// PUT /authenticate - Validates a signed authentication request and returns a token.
+///
+/// Requires `Content-Type: application/octet-stream`. The body should be a JSON string.
+/// If successful and approved, returns an `authToken`.
 pub async fn authenticate(
     State(state): State<SharedState>,
     headers: HeaderMap,
@@ -139,6 +150,7 @@ pub async fn authenticate(
     }
 }
 
+/// Validates that a string is a valid base64url encoded 32-byte public key.
 fn validate_pubkey(pk: &str) -> Result<(), ()> {
     let pk = BASE64_URL_SAFE_NO_PAD.decode(pk).map_err(|_| ())?;
     if pk.len() != 32 {
@@ -147,6 +159,9 @@ fn validate_pubkey(pk: &str) -> Result<(), ()> {
     Ok(())
 }
 
+/// Verifies an Ed25519 signature over a payload.
+///
+/// Ensures the payload timestamp is within the allowed `drift_secs`.
 fn validate_signature(
     drift_secs: f64,
     base64_url_encoded_pubkey: &str,
