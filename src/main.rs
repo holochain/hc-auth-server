@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or_else(|_| {
-                "hc_auth_server=debug,tower_http=debug".into()
+                "info,hc_auth_server=debug,tower_http=debug".into()
             }),
         ))
         .with(tracing_subscriber::fmt::layer())
