@@ -22,6 +22,8 @@ pub async fn now_handler() -> impl IntoResponse {
     buf[..8].copy_from_slice(&now.to_le_bytes());
 
     // Remaining 24 bytes: random
+    // this is a nonce to add security to the signatures
+    // while not strictly needed, it can't hurt
     rand::rng().fill_bytes(&mut buf[8..]);
 
     BASE64_URL_SAFE_NO_PAD.encode(buf).into_response()
