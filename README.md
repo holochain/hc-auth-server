@@ -16,9 +16,11 @@ This project is built using:
 #### Code Structure
 - `src/main.rs`: Application entry point. Sets up logging, loads configuration, defines routes, and starts the server.
 - `src/config.rs`: Manages application configuration loaded from environment variables.
-- `src/auth.rs`: Handles OAuth2 login flow and callback processing.
-- `src/routes.rs`: Contains handlers for standard application routes (e.g., home, protected pages).
-- `src/github.rs`: Utilities for interacting with the GitHub API (user info, team membership).
+- `src/routes_client.rs`: Handlers for client-facing authentication routes.
+- `src/routes_ops.rs`: Handlers for web-based administrative operations (OAuth, dashboard).
+- `src/routes_api.rs`: Handlers for programmatic administrative API access.
+- `src/storage.rs`: Abstracted storage layer for Redis interaction.
+- `src/github.rs`: Utilities for interacting with the GitHub API.
 - `templates/`: HTML templates used by the application.
 
 ### Getting Started
@@ -107,6 +109,49 @@ dd if=/dev/random bs=66 count=1 | base64 -w0
 - **Health**: Standard HTTP health checks can be performed against the root endpoint `/` (returns public home page) or you may want to ensure the process accepts TCP connections. Note that the restricted operations area is now under `/ops-auth`.
 
 ### Operational Notes
+
+### API Documentation
+
+The server provides three sets of routes: Client, Operations (Ops), and Admin (API).
+
+#### Client Routes
+These routes are used by clients wishing to authenticate.
+
+| Route | Method | Description | Path Elements | Query Params | Error Codes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `/now` | `GET` | Get a challenge payload for signing. | None | None | 500 (Server Error) |
+| `/request-auth/{key}` | `PUT` | Request authentication for a public key. | `{key}`: Base64URL encoded Ed25519 public key. | None | 401 (Invalid Key), 429 (Too many pending), 500 (Storage Error) |
+| `/authenticate` | `PUT` | Finalize authentication with a signed challenge. | None | None | 401 (Unauthorized/Invalid Sig), 500 (Storage Error) |
+
+**Notes on `/authenticate`**:
+- Requires `Content-Type: application/octet-stream`.
+- Body must be a UTF-8 JSON string containing `pubKey`, `signature`, and `payload` (all Base64URL encoded).
+- `payload` must be exactly what was returned by `/now`.
+
+#### Operations (Ops) Routes
+These routes are used by administrators via the web interface.
+
+| Route | Method | Description | Path Elements | Query Params | Error Codes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `/` | `GET` | Home page. | None | `error`: Optional error message. | 500 (Render Error) |
+| `/ops/auth` | `GET` | Management dashboard (requires login). | None | `view_key`: Optional key to view details. | 302 (Redirect if not logged in) |
+| `/ops/approve` | `POST` | Approve a pending request (requires CSRF).| None | None | 302 (Redirect on success/error) |
+| `/ops/reject` | `POST` | Reject/Delete a request (requires CSRF). | None | None | 302 (Redirect on success/error) |
+| `/ops/logout` | `GET` | Log out from the management session. | None | None | 302 (Redirect to `/`) |
+| `/ops/oauth-login` | `GET` | Initiate GitHub OAuth login. | None | None | 302 (Redirect to GitHub) |
+| `/ops/oauth-callback`| `GET` | GitHub OAuth callback handler. | None | `code`, `state` | 302 (Redirect to home/error) |
+
+#### Admin (API) Routes
+These routes provide programmatic access to management functions. All routes require an `Authorization: Bearer <token>` header.
+
+| Route | Method | Description | Path Elements | Query Params | Error Codes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `/api/list` | `GET` | List all pending request keys. | None | None | 401 (Unauthorized), 500 (Server Error) |
+| `/api/get/{key}` | `GET` | Get details for a specific key. | `{key}`: Base64URL encoded public key. | None | 401 (Unauthorized), 404 (Not Found) |
+| `/api/approve/{key}`| `POST`| Approve a pending request. | `{key}`: Base64URL encoded public key. | None | 401 (Unauthorized), 500 (Server Error) |
+| `/api/reject/{key}` | `POST`| Reject a pending request. | `{key}`: Base64URL encoded public key. | None | 401 (Unauthorized), 500 (Server Error) |
+
+---
 
 - Ensure the `SESSION_SECRET` is kept secure and rotated if compromised.
 - The service is stateless regarding session data (stored in signed cookies), allowing for horizontal scaling behind a load balancer, provided cookie sticking/affinity is not required by `tower-cookies` (it is not, as state is client-side).
