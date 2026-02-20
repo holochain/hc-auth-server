@@ -14,6 +14,28 @@ const STATE_PENDING: &str = "pending";
 const STATE_AUTHORIZED: &str = "authorized";
 const STATE_BLOCKED: &str = "blocked";
 
+/// Storage error type.
+#[derive(Debug, thiserror::Error)]
+pub enum StorageErr {
+    /// Too many pending requests.
+    #[error("Too many pending requests")]
+    TooManyPendingRequests,
+
+    /// Redis error.
+    #[error("Redis error: {0}")]
+    Redis(#[from] redis::RedisError),
+
+    /// Other error.
+    #[error("Other error: {0}")]
+    Other(#[from] Box<dyn std::error::Error>),
+}
+
+impl StorageErr {
+    pub fn other<E: Into<Box<dyn std::error::Error>>>(e: E) -> Self {
+        Self::Other(e.into())
+    }
+}
+
 /// Authorization Key State
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum State {
@@ -190,18 +212,18 @@ impl Storage {
     fn with_connection<F, T>(
         &self,
         mut f: F,
-    ) -> Result<T, Box<dyn std::error::Error>>
+    ) -> Result<T, StorageErr>
     where
-        F: FnMut(&mut dyn redis::ConnectionLike) -> redis::RedisResult<T>,
+        F: FnMut(&mut dyn redis::ConnectionLike) -> Result<T, StorageErr>,
     {
         match &self.client {
             RedisClient::Standalone(client) => {
                 let mut con = client.get_connection()?;
-                f(&mut con).map_err(Into::into)
+                f(&mut con)
             }
             RedisClient::Cluster(client) => {
                 let mut con = client.get_connection()?;
-                f(&mut con).map_err(Into::into)
+                f(&mut con)
             }
         }
     }
@@ -210,24 +232,20 @@ impl Storage {
         &self,
         key: &str,
         data: &Value,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let json_str = serde_json::to_string(data)?;
+    ) -> Result<(), StorageErr> {
+        let json_str = serde_json::to_string(data).map_err(StorageErr::other)?;
 
         self.with_connection(|con| {
             redis_add_pending(con, key, State::Pending, &json_str, self.max_pending_requests)
                 .map_err(|e| {
                     if e.to_string().contains("limit_reached") {
-                        redis::RedisError::from((
-                            redis::ErrorKind::TypeError,
-                            "Pending request limit reached",
-                        ))
+                        StorageErr::TooManyPendingRequests
                     } else {
-                        e
+                        e.into()
                     }
                 })?;
             Ok(())
         })
-        .map_err(Into::into)
     }
 
     pub fn approve_request(

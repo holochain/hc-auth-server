@@ -9,6 +9,7 @@ use axum::{
 use base64::prelude::*;
 use ed25519_dalek::{Signature, VerifyingKey};
 use crate::now;
+use crate::storage::StorageErr;
 
 pub async fn now_handler() -> impl IntoResponse {
     use rand::prelude::*;
@@ -43,21 +44,24 @@ pub async fn request_auth(
         "lastAccess": now(),
         "payload": payload,
     });
-    if let Err(e) = state.storage.add_pending_request(&key, &payload) {
-        let err_msg = e.to_string();
-        if err_msg.contains("limit reached") {
+
+    match state.storage.add_pending_request(&key, &payload) {
+        Err(StorageErr::TooManyPendingRequests) => {
             return (
                 axum::http::StatusCode::TOO_MANY_REQUESTS,
                 "Pending request limit reached",
             )
                 .into_response();
         }
-        tracing::error!("Failed to set auth data: {}", e);
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to store data",
-        )
+        Err(err) => {
+            tracing::error!("Failed to set auth data: {}", err);
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to store data",
+            )
             .into_response();
+        }
+        Ok(_) => (),
     }
 
     (axum::http::StatusCode::OK, "OK").into_response()
