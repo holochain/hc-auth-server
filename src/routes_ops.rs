@@ -4,8 +4,8 @@ use axum::{
     response::{Html, IntoResponse, Redirect},
 };
 use oauth2::{
-    AuthUrl, AuthorizationCode, CsrfToken, RedirectUrl, Scope, TokenResponse,
-    TokenUrl, basic::BasicClient,
+    AuthUrl, AuthorizationCode, CsrfToken, PkceCodeChallenge, RedirectUrl,
+    Scope, TokenResponse, TokenUrl, basic::BasicClient,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -29,16 +29,19 @@ pub struct ProtectedTemplate {
     pub unauthorized_keys: Vec<String>,
     pub view_key: Option<String>,
     pub current_value: Option<String>,
+    pub csrf_token: String,
 }
 
 #[derive(Deserialize)]
 pub struct ApproveRequest {
     pub key: String,
+    pub csrf_token: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct AuthRequest {
     pub code: String,
+    pub state: String,
 }
 
 pub async fn ops_home(
@@ -74,6 +77,22 @@ pub async fn ops_auth(
     let signed_cookies = cookies.signed(&key);
 
     if let Some(cookie) = signed_cookies.get("user_session") {
+        let username = cookie.value().to_string();
+        
+        // Handle CSRF token for the session
+        let csrf_token = {
+            let mut csrf_tokens = state.csrf_tokens.lock().unwrap();
+            let entry = csrf_tokens.entry(username.clone()).or_insert_with(|| {
+                crate::state::CsrfTokenEntry {
+                    token: rand::random::<u64>().to_string(),
+                    created_at: std::time::Instant::now(),
+                }
+            });
+            // Update timestamp on access
+            entry.created_at = std::time::Instant::now();
+            entry.token.clone()
+        };
+
         let authorized_map =
             state.storage.get_authorized_requests().unwrap_or_default();
         let pending_map =
@@ -111,6 +130,7 @@ pub async fn ops_auth(
             unauthorized_keys,
             view_key,
             current_value,
+            csrf_token,
         };
         template
             .render()
@@ -133,7 +153,18 @@ pub async fn ops_approve(
     let key = tower_cookies::Key::from(&state.session_secret);
     let signed_cookies = cookies.signed(&key);
 
-    if signed_cookies.get("user_session").is_none() {
+    if let Some(cookie) = signed_cookies.get("user_session") {
+        let username = cookie.value().to_string();
+        let expected_token = {
+            let csrf_tokens = state.csrf_tokens.lock().unwrap();
+            csrf_tokens.get(&username).map(|e| e.token.clone())
+        };
+
+        if expected_token.is_none() || expected_token.unwrap() != form.csrf_token {
+            tracing::warn!("CSRF token mismatch on approve for user: {}", username);
+            return Redirect::to("/ops-auth?error=invalid_csrf").into_response();
+        }
+    } else {
         return Redirect::to("/").into_response();
     }
 
@@ -152,7 +183,18 @@ pub async fn ops_reject(
     let key = tower_cookies::Key::from(&state.session_secret);
     let signed_cookies = cookies.signed(&key);
 
-    if signed_cookies.get("user_session").is_none() {
+    if let Some(cookie) = signed_cookies.get("user_session") {
+        let username = cookie.value().to_string();
+        let expected_token = {
+            let csrf_tokens = state.csrf_tokens.lock().unwrap();
+            csrf_tokens.get(&username).map(|e| e.token.clone())
+        };
+
+        if expected_token.is_none() || expected_token.unwrap() != form.csrf_token {
+            tracing::warn!("CSRF token mismatch on reject for user: {}", username);
+            return Redirect::to("/ops-auth?error=invalid_csrf").into_response();
+        }
+    } else {
         return Redirect::to("/").into_response();
     }
 
@@ -178,6 +220,7 @@ pub async fn ops_logout(
 }
 
 pub async fn ops_oauth_login(
+    cookies: Cookies,
     State(state): State<SharedState>,
 ) -> impl IntoResponse {
     let client_id = state.github_client_id.clone();
@@ -204,10 +247,36 @@ pub async fn ops_oauth_login(
         .expect("Invalid redirect URL"),
     );
 
-    let (auth_url, _csrf_token) = client
-        .authorize_url(CsrfToken::new_random)
-        .add_scope(Scope::new("read:org".to_string())) // Need read:org to check team membership
+    // Proper PKCE setup: generate both the challenge and verifier at once
+    let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
+    let csrf_token = CsrfToken::new_random();
+
+    let (auth_url, csrf_token) = client
+        .authorize_url(|| csrf_token)
+        .set_pkce_challenge(pkce_challenge)
+        .add_scope(Scope::new("read:org".to_string()))
         .url();
+
+    // Store the state and verifier in AppState
+    let csrf_id = rand::random::<u64>().to_string();
+    {
+        let mut pending = state.pending_auth.lock().unwrap();
+        pending.insert(
+            csrf_id.clone(),
+            crate::state::PendingAuth {
+                state: csrf_token,
+                pkce_verifier,
+                created_at: std::time::Instant::now(),
+            },
+        );
+    }
+
+    // Set csrf_id cookie
+    let mut cookie = Cookie::new("csrf_id", csrf_id);
+    cookie.set_path("/");
+    cookie.set_http_only(true);
+    let key = tower_cookies::Key::from(&state.session_secret);
+    cookies.signed(&key).add(cookie);
 
     Redirect::to(auth_url.as_str())
 }
@@ -241,9 +310,39 @@ pub async fn ops_oauth_callback(
         .expect("Invalid redirect URL"),
     );
 
+    // Verify CSRF state and PKCE verifier
+    let key = tower_cookies::Key::from(&state.session_secret);
+    let signed_cookies = cookies.signed(&key);
+    let csrf_id = match signed_cookies.get("csrf_id") {
+        Some(c) => c.value().to_string(),
+        None => {
+            tracing::warn!("Missing csrf_id cookie");
+            return Redirect::to("/?error=missing_csrf").into_response();
+        }
+    };
+
+    let pending_auth = {
+        let mut pending = state.pending_auth.lock().unwrap();
+        pending.remove(&csrf_id)
+    };
+
+    let pending_auth = match pending_auth {
+        Some(p) => p,
+        None => {
+            tracing::warn!("No pending auth found for csrf_id");
+            return Redirect::to("/?error=invalid_csrf").into_response();
+        }
+    };
+
+    if pending_auth.state.secret() != &query.state {
+        tracing::warn!("CSRF state mismatch");
+        return Redirect::to("/?error=state_mismatch").into_response();
+    }
+
     // Exchange the code with a token.
     let token_result = client
         .exchange_code(AuthorizationCode::new(query.code.clone()))
+        .set_pkce_verifier(pending_auth.pkce_verifier)
         .request_async(oauth2::reqwest::async_http_client)
         .await;
 
@@ -276,7 +375,7 @@ pub async fn ops_oauth_callback(
                             "User authenticated and verified in team."
                         );
                     }
-                    Redirect::to("/")
+                    Redirect::to("/").into_response()
                 }
                 Ok(false) => {
                     tracing::warn!(
@@ -302,17 +401,17 @@ pub async fn ops_oauth_callback(
                         tracing::debug!("DEBUG: Failed to list user teams.");
                     }
 
-                    Redirect::to("/?error=access_denied")
+                    Redirect::to("/?error=access_denied").into_response()
                 }
                 Err(e) => {
                     tracing::error!("Failed to verify team membership: {}", e);
-                    Redirect::to("/?error=verification_failed")
+                    Redirect::to("/?error=verification_failed").into_response()
                 }
             }
         }
         Err(e) => {
             tracing::error!("Token exchange failed: {}", e);
-            Redirect::to("/")
+            Redirect::to("/").into_response()
         }
     }
 }

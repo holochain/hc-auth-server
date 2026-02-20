@@ -45,7 +45,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config: Arc::new(config),
         storage: Arc::new(storage),
         http_client,
+        pending_auth: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        csrf_tokens: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
     };
+
+    // Spawn background cleanup task
+    let cleanup_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // 5 minutes
+        loop {
+            interval.tick().await;
+            let now = std::time::Instant::now();
+            let ttl = std::time::Duration::from_secs(900); // 15 minutes
+
+            {
+                let mut pending = cleanup_state.pending_auth.lock().unwrap();
+                pending.retain(|_, v| now.duration_since(v.created_at) < ttl);
+            }
+            {
+                let mut csrf = cleanup_state.csrf_tokens.lock().unwrap();
+                csrf.retain(|_, v| now.duration_since(v.created_at) < ttl);
+            }
+            tracing::debug!("Cleaned up expired CSRF and OAuth tokens");
+        }
+    });
 
     // Build our application with a route
     let app = Router::new()

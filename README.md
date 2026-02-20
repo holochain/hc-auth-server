@@ -61,7 +61,7 @@ To run this application, you need to register a new OAuth application on GitHub:
     The server typically starts on `http://127.0.0.1:3000`.
 5.  **Inject a test request:**
     ```bash
-    curl -X PUT -H "content-type: application/json" -d '{"ned": "fred"}' http://127.0.0.1:3000/request-auth/my-banana99
+    curl -v -X PUT -H "content-type: application/json" -d '{"ned": "fred"}' "http://127.0.0.1:3000/request-auth/$(dd if=/dev/random bs=32 count=1 | base64 -w0 | tr '+/' '-_' | tr -d '=')"
     ```
 
 ## For DevOps
