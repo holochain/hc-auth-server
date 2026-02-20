@@ -8,15 +8,13 @@ use axum::{
 };
 use base64::prelude::*;
 use ed25519_dalek::{Signature, VerifyingKey};
+use crate::now;
 
 pub async fn now_handler() -> impl IntoResponse {
     use rand::prelude::*;
 
     // Current time as f64 seconds since epoch
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("current time")
-        .as_secs_f64();
+    let now = now();
 
     let mut buf = [0u8; 32];
 
@@ -160,10 +158,7 @@ fn validate_signature(
     let ts_bytes: [u8; 8] = payload_bytes[..8].try_into().map_err(|_| ())?;
     let timestamp = f64::from_le_bytes(ts_bytes);
 
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| ())?
-        .as_secs_f64();
+    let now = now();
 
     if timestamp > now + drift_secs {
         return Err(());
@@ -187,8 +182,4 @@ fn validate_signature(
         .map_err(|_| ())?;
 
     Ok(())
-}
-
-fn now() -> f64 {
-    std::time::UNIX_EPOCH.elapsed().unwrap().as_secs_f64()
 }

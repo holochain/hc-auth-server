@@ -6,6 +6,7 @@ use redis::{Client, RedisResult, Script};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::OnceLock;
+use crate::now;
 
 // BEGIN NEW REDIS API
 
@@ -64,12 +65,7 @@ fn state_key(state: State) -> String {
 }
 
 fn now_secs() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        .to_string()
+    (now() as u64).to_string()
 }
 
 fn redis_add_pending(
