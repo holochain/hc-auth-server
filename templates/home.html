@@ -10,6 +10,12 @@
 <body>
     <h1>Welcome to Rust OAuth Demo</h1>
 
+    {% if let Some(err) = error %}
+    <div class="error-message">
+        <p><strong>Error:</strong> {{ err }}</p>
+    </div>
+    {% endif %}
+
     {% if logged_in %}
     <p>You are logged in as <strong>{{ username.as_ref().unwrap() }}</strong>!</p>
     <p><a href="/ops/auth" class="button">Go to Protected Area</a></p>

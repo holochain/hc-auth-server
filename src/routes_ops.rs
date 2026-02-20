@@ -32,6 +32,7 @@ use crate::state::AppState as SharedState;
 pub struct HomeTemplate {
     pub logged_in: bool,
     pub username: Option<String>,
+    pub error: Option<String>,
 }
 
 #[derive(Template)]
@@ -60,6 +61,7 @@ pub struct AuthRequest {
 pub async fn ops_home(
     cookies: Cookies,
     State(state): State<SharedState>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
     let key = tower_cookies::Key::from(&state.config.session_secret);
     let signed_cookies = cookies.signed(&key);
@@ -70,9 +72,12 @@ pub async fn ops_home(
         None => (false, None),
     };
 
+    let error = params.get("error").cloned();
+
     let template = HomeTemplate {
         logged_in,
         username,
+        error,
     };
 
     template.render().map(Html).map_err(|e| {
