@@ -78,25 +78,32 @@ pub async fn ops_auth(
 
     if let Some(cookie) = signed_cookies.get("user_session") {
         let username = cookie.value().to_string();
-        
+
         // Handle CSRF token for the session
         let csrf_token = {
             let mut csrf_tokens = state.csrf_tokens.lock().unwrap();
-            let entry = csrf_tokens.entry(username.clone()).or_insert_with(|| {
-                crate::state::CsrfTokenEntry {
-                    token: rand::random::<u64>().to_string(),
-                    created_at: std::time::Instant::now(),
-                }
-            });
+            let entry =
+                csrf_tokens.entry(username.clone()).or_insert_with(|| {
+                    crate::state::CsrfTokenEntry {
+                        token: rand::random::<u64>().to_string(),
+                        created_at: std::time::Instant::now(),
+                    }
+                });
             // Update timestamp on access
             entry.created_at = std::time::Instant::now();
             entry.token.clone()
         };
 
-        let authorized_map =
-            state.storage.get_authorized_requests().await.unwrap_or_default();
-        let pending_map =
-            state.storage.get_pending_requests().await.unwrap_or_default();
+        let authorized_map = state
+            .storage
+            .get_authorized_requests()
+            .await
+            .unwrap_or_default();
+        let pending_map = state
+            .storage
+            .get_pending_requests()
+            .await
+            .unwrap_or_default();
 
         let mut authorized_keys: Vec<String> =
             authorized_map.keys().cloned().collect();
@@ -160,9 +167,15 @@ pub async fn ops_approve(
             csrf_tokens.get(&username).map(|e| e.token.clone())
         };
 
-        if expected_token.is_none() || expected_token.unwrap() != form.csrf_token {
-            tracing::warn!("CSRF token mismatch on approve for user: {}", username);
-            return Redirect::to("/ops-auth?error=invalid_csrf").into_response();
+        if expected_token.is_none()
+            || expected_token.unwrap() != form.csrf_token
+        {
+            tracing::warn!(
+                "CSRF token mismatch on approve for user: {}",
+                username
+            );
+            return Redirect::to("/ops-auth?error=invalid_csrf")
+                .into_response();
         }
     } else {
         return Redirect::to("/").into_response();
@@ -190,9 +203,15 @@ pub async fn ops_reject(
             csrf_tokens.get(&username).map(|e| e.token.clone())
         };
 
-        if expected_token.is_none() || expected_token.unwrap() != form.csrf_token {
-            tracing::warn!("CSRF token mismatch on reject for user: {}", username);
-            return Redirect::to("/ops-auth?error=invalid_csrf").into_response();
+        if expected_token.is_none()
+            || expected_token.unwrap() != form.csrf_token
+        {
+            tracing::warn!(
+                "CSRF token mismatch on reject for user: {}",
+                username
+            );
+            return Redirect::to("/ops-auth?error=invalid_csrf")
+                .into_response();
         }
     } else {
         return Redirect::to("/").into_response();
@@ -245,14 +264,20 @@ pub async fn ops_oauth_login(
     .set_redirect_uri(
         RedirectUrl::new(format!(
             "{}://{}:{}/ops-oauth-callback",
-            if state.config.production { "https" } else { "http" },
-            state.config.host, state.config.port
+            if state.config.production {
+                "https"
+            } else {
+                "http"
+            },
+            state.config.host,
+            state.config.port
         ))
         .expect("Invalid redirect URL"),
     );
 
     // Proper PKCE setup: generate both the challenge and verifier at once
-    let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
+    let (pkce_challenge, pkce_verifier) =
+        PkceCodeChallenge::new_random_sha256();
     let csrf_token = CsrfToken::new_random();
 
     let (auth_url, csrf_token) = client
@@ -312,8 +337,13 @@ pub async fn ops_oauth_callback(
     .set_redirect_uri(
         RedirectUrl::new(format!(
             "{}://{}:{}/ops-oauth-callback",
-            if state.config.production { "https" } else { "http" },
-            state.config.host, state.config.port
+            if state.config.production {
+                "https"
+            } else {
+                "http"
+            },
+            state.config.host,
+            state.config.port
         ))
         .expect("Invalid redirect URL"),
     );
@@ -365,7 +395,10 @@ pub async fn ops_oauth_callback(
 
             // Check team membership
             match gh_client
-                .is_team_member(&state.config.github_org, &state.config.github_team)
+                .is_team_member(
+                    &state.config.github_org,
+                    &state.config.github_team,
+                )
                 .await
             {
                 Ok(true) => {
@@ -379,8 +412,9 @@ pub async fn ops_oauth_callback(
                             cookie.set_secure(true);
                         }
 
-                        let key =
-                            tower_cookies::Key::from(&state.config.session_secret);
+                        let key = tower_cookies::Key::from(
+                            &state.config.session_secret,
+                        );
                         cookies.signed(&key).add(cookie);
                         tracing::info!(
                             "User authenticated and verified in team."

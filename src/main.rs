@@ -45,7 +45,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let production = config.production;
 
     // Initialize Storage
-    let storage = Storage::new(&config).await.expect("Failed to initialize storage");
+    let storage = Storage::new(&config)
+        .await
+        .expect("Failed to initialize storage");
 
     let http_client = reqwest::Client::new();
 
@@ -53,14 +55,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config: Arc::new(config),
         storage: Arc::new(storage),
         http_client,
-        pending_auth: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
-        csrf_tokens: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        pending_auth: Arc::new(std::sync::Mutex::new(
+            std::collections::HashMap::new(),
+        )),
+        csrf_tokens: Arc::new(std::sync::Mutex::new(
+            std::collections::HashMap::new(),
+        )),
     };
 
     // Spawn background cleanup task
     let cleanup_state = state.clone();
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // 5 minutes
+        let mut interval =
+            tokio::time::interval(tokio::time::Duration::from_secs(300)); // 5 minutes
         loop {
             interval.tick().await;
             let now = std::time::Instant::now();

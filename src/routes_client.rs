@@ -1,4 +1,6 @@
+use crate::now;
 use crate::state::AppState as SharedState;
+use crate::storage::StorageErr;
 use axum::{
     Json,
     body::Bytes,
@@ -8,8 +10,6 @@ use axum::{
 };
 use base64::prelude::*;
 use ed25519_dalek::{Signature, VerifyingKey};
-use crate::now;
-use crate::storage::StorageErr;
 
 pub async fn now_handler() -> impl IntoResponse {
     use rand::prelude::*;
@@ -59,7 +59,7 @@ pub async fn request_auth(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to store data",
             )
-            .into_response();
+                .into_response();
         }
         Ok(_) => (),
     }
@@ -98,11 +98,13 @@ pub async fn authenticate(
 
     // Check pubKey
     if let Some(pub_key) = json_val.get("pubKey").and_then(|v| v.as_str()) {
-        if validate_pubkey(&pub_key).is_err() {
+        if validate_pubkey(pub_key).is_err() {
             return axum::http::StatusCode::UNAUTHORIZED.into_response();
         }
         if let (Some(sig), Some(pay)) = (signature, payload) {
-            if validate_signature(state.config.drift_secs, pub_key, sig, pay).is_err() {
+            if validate_signature(state.config.drift_secs, pub_key, sig, pay)
+                .is_err()
+            {
                 return axum::http::StatusCode::UNAUTHORIZED.into_response();
             }
         } else {

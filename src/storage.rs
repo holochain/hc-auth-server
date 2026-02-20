@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::now;
 use base64::prelude::*;
 use rand::RngCore;
 use redis::aio::ConnectionManager;
@@ -6,7 +7,6 @@ use redis::{RedisResult, Script};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::OnceLock;
-use crate::now;
 
 // BEGIN NEW REDIS API
 
@@ -112,7 +112,7 @@ async fn redis_transition(
     con: &mut impl redis::aio::ConnectionLike,
     key: &str,
     from_state: State,
-    to_state: State
+    to_state: State,
 ) -> RedisResult<()> {
     lua_transition()
         .key(auth_key(key))
@@ -182,14 +182,15 @@ pub fn redis_list_all_keys(
 }
 */
 
-
 pub struct Storage {
     connection_manager: ConnectionManager,
     max_pending_requests: usize,
 }
 
 impl Storage {
-    pub async fn new(config: &Config) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(
+        config: &Config,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let max_pending_requests = config.max_pending_requests;
         if let Some(url) = &config.redis_url {
             let client = redis::Client::open(url.as_str())?;
@@ -219,23 +220,31 @@ impl Storage {
         key: &str,
         data: &Value,
     ) -> Result<(), StorageErr> {
-        let json_str = serde_json::to_string(data).map_err(StorageErr::other)?;
+        let json_str =
+            serde_json::to_string(data).map_err(StorageErr::other)?;
 
         self.with_connection(|mut con| {
             let json_str = json_str.clone();
             async move {
-                redis_add_pending(&mut con, key, State::Pending, &json_str, self.max_pending_requests)
-                    .await
-                    .map_err(|e| {
-                        if e.to_string().contains("limit_reached") {
-                            StorageErr::TooManyPendingRequests
-                        } else {
-                            e.into()
-                        }
-                    })?;
+                redis_add_pending(
+                    &mut con,
+                    key,
+                    State::Pending,
+                    &json_str,
+                    self.max_pending_requests,
+                )
+                .await
+                .map_err(|e| {
+                    if e.to_string().contains("limit_reached") {
+                        StorageErr::TooManyPendingRequests
+                    } else {
+                        e.into()
+                    }
+                })?;
                 Ok(())
             }
-        }).await
+        })
+        .await
     }
 
     pub async fn approve_request(
@@ -243,7 +252,8 @@ impl Storage {
         key: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.with_connection(|mut con| async move {
-            redis_transition(&mut con, key, State::Pending, State::Authorized).await?;
+            redis_transition(&mut con, key, State::Pending, State::Authorized)
+                .await?;
             Ok(())
         })
         .await

@@ -88,13 +88,12 @@ pub async fn api_reject_pending(
 
 fn check_api_token(headers: &HeaderMap, state: &SharedState) -> bool {
     let auth_header = headers.get(axum::http::header::AUTHORIZATION);
-    if let Some(auth_value) = auth_header {
-        if let Ok(auth_str) = auth_value.to_str() {
-            if auth_str.starts_with("Bearer ") {
-                let token = &auth_str[7..];
-                return state.config.api_tokens.contains(token);
-            }
-        }
+    if let Some(auth_value) = auth_header
+        && let Ok(auth_str) = auth_value.to_str()
+        && auth_str.starts_with("Bearer ")
+    {
+        let token = &auth_str[7..];
+        return state.config.api_tokens.contains(token);
     }
     false
 }
