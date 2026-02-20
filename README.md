@@ -36,7 +36,7 @@ To run this application, you need to register a new OAuth application on GitHub:
 3.  Fill in the details:
     - **Application Name**: `Rust OAuth Service` (or your preferred name)
     - **Homepage URL**: `http://127.0.0.1:3000` (for local development)
-    - **Authorization callback URL**: `http://127.0.0.1:3000/ops-oauth-callback`
+    - **Authorization callback URL**: `http://127.0.0.1:3000/ops/oauth-callback`
 4.  Click **Register application**.
 5.  On the application page, you will see the **Client ID**. Copy this value to `GITHUB_CLIENT_ID` in your `.env` file.
 6.  Click **Generate a new client secret**. Copy this value to `GITHUB_CLIENT_SECRET` in your `.env` file.

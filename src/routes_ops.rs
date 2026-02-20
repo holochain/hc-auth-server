@@ -174,7 +174,7 @@ pub async fn ops_approve(
                 "CSRF token mismatch on approve for user: {}",
                 username
             );
-            return Redirect::to("/ops-auth?error=invalid_csrf")
+            return Redirect::to("/ops/auth?error=invalid_csrf")
                 .into_response();
         }
     } else {
@@ -185,7 +185,7 @@ pub async fn ops_approve(
         tracing::error!("Failed to approve request: {}", e);
     }
 
-    Redirect::to("/ops-auth").into_response()
+    Redirect::to("/ops/auth").into_response()
 }
 
 pub async fn ops_reject(
@@ -210,7 +210,7 @@ pub async fn ops_reject(
                 "CSRF token mismatch on reject for user: {}",
                 username
             );
-            return Redirect::to("/ops-auth?error=invalid_csrf")
+            return Redirect::to("/ops/auth?error=invalid_csrf")
                 .into_response();
         }
     } else {
@@ -221,7 +221,7 @@ pub async fn ops_reject(
         tracing::error!("Failed to reject request: {}", e);
     }
 
-    Redirect::to("/ops-auth").into_response()
+    Redirect::to("/ops/auth").into_response()
 }
 
 pub async fn ops_logout(
@@ -263,7 +263,7 @@ pub async fn ops_oauth_login(
     )
     .set_redirect_uri(
         RedirectUrl::new(format!(
-            "{}://{}:{}/ops-oauth-callback",
+            "{}://{}:{}/ops/oauth-callback",
             if state.config.production {
                 "https"
             } else {
@@ -336,7 +336,7 @@ pub async fn ops_oauth_callback(
     )
     .set_redirect_uri(
         RedirectUrl::new(format!(
-            "{}://{}:{}/ops-oauth-callback",
+            "{}://{}:{}/ops/oauth-callback",
             if state.config.production {
                 "https"
             } else {

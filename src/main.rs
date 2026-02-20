@@ -99,17 +99,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         // These next routes are "Ops" routes for managing the auth server.
         .route("/", get(routes_ops::ops_home))
-        .route("/ops-auth", get(routes_ops::ops_auth))
-        .route("/ops-approve", post(routes_ops::ops_approve))
-        .route("/ops-reject", post(routes_ops::ops_reject))
-        .route("/ops-logout", get(routes_ops::ops_logout))
-        .route("/ops-oauth-login", get(routes_ops::ops_oauth_login))
-        .route("/ops-oauth-callback", get(routes_ops::ops_oauth_callback))
+        .route("/ops/auth", get(routes_ops::ops_auth))
+        .route("/ops/approve", post(routes_ops::ops_approve))
+        .route("/ops/reject", post(routes_ops::ops_reject))
+        .route("/ops/logout", get(routes_ops::ops_logout))
+        .route("/ops/oauth-login", get(routes_ops::ops_oauth_login))
+        .route("/ops/oauth-callback", get(routes_ops::ops_oauth_callback))
         // These next routes are "API" routes for automated processes managing the auth server.
-        .route("/api-list", get(routes_api::api_list_pending))
-        .route("/api-get/{key}", get(routes_api::api_get_pending))
-        .route("/api-approve/{key}", post(routes_api::api_approve_pending))
-        .route("/api-reject/{key}", post(routes_api::api_reject_pending))
+        .route("/api/list", get(routes_api::api_list_pending))
+        .route("/api/get/{key}", get(routes_api::api_get_pending))
+        .route("/api/approve/{key}", post(routes_api::api_approve_pending))
+        .route("/api/reject/{key}", post(routes_api::api_reject_pending))
         // Finally some middleware to handle cookies, and the shared state.
         .layer(CookieManagerLayer::new())
         .with_state(state);

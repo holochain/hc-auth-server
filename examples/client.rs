@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4.1. List pending requests
     println!("  Listing pending requests...");
     let list_resp = client
-        .get(format!("{}/api-list", base_url))
+        .get(format!("{}/api/list", base_url))
         .header("Authorization", &auth_header)
         .send()
         .await?;
@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4.2. Get pending request data
     println!("  Verifying request data...");
     let get_resp = client
-        .get(format!("{}/api-get/{}", base_url, pubkey_b64))
+        .get(format!("{}/api/get/{}", base_url, pubkey_b64))
         .header("Authorization", &auth_header)
         .send()
         .await?;
@@ -95,7 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4.3. Approve the request
     println!("  Approving request...");
     let approve_resp = client
-        .post(format!("{}/api-approve/{}", base_url, pubkey_b64))
+        .post(format!("{}/api/approve/{}", base_url, pubkey_b64))
         .header("Authorization", &auth_header)
         .send()
         .await?;

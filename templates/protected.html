@@ -17,14 +17,14 @@
     <ul>
       {% for key in unauthorized_keys %}
       <li style="display: flex; align-items: center; justify-content: space-between; width: 400px; padding: 5px 0;">
-        <a href="/ops-auth?view_key={{ key }}">{{ key }}</a>
-        <form action="/ops-approve" method="POST" style="margin: 0;">
+        <a href="/ops/auth?view_key={{ key }}">{{ key }}</a>
+        <form action="/ops/approve" method="POST" style="margin: 0;">
           <input type="hidden" name="key" value="{{ key }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button type="submit"
             style="background-color: lightgreen; border: 1px solid green; padding: 2px 5px; cursor: pointer;">Approve</button>
         </form>
-        <form action="/ops-reject" method="POST" style="margin: 0; margin-left: 5px;">
+        <form action="/ops/reject" method="POST" style="margin: 0; margin-left: 5px;">
           <input type="hidden" name="key" value="{{ key }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button type="submit"
@@ -38,7 +38,7 @@
     <ul>
       {% for key in authorized_keys %}
       <li>
-        <a href="/ops-auth?view_key={{ key }}">{{ key }}</a>
+        <a href="/ops/auth?view_key={{ key }}">{{ key }}</a>
       </li>
       {% endfor %}
     </ul>
@@ -52,7 +52,7 @@
   {% endif %}
 
   <a href="/" class="back-link">&larr; Back to Home</a>
-  <a href="/ops-logout" class="back-link" style="margin-left: 15px; color: red;">Logout</a>
+  <a href="/ops/logout" class="back-link" style="margin-left: 15px; color: red;">Logout</a>
 </body>
 
 </html>
