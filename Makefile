@@ -1,6 +1,6 @@
 # hc-auth-server makefile
 
-.PHONY: all test bump
+.PHONY: all test
 
 all: test
 

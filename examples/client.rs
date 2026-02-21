@@ -117,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 5.1. Get fresh payload from /now
     let now_url = format!("{}/now", base_url);
-    let now_resp = client.get(&now_url).send().await?;
+    let now_resp = client.get(&now_url).send().await?.error_for_status()?;
     let payload_b64 = now_resp.text().await?;
     let payload_bytes = BASE64_URL_SAFE_NO_PAD.decode(&payload_b64)?;
 

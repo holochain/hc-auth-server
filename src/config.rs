@@ -67,10 +67,10 @@ impl Config {
             drift_secs: env::var("DRIFT_SECS")
                 .unwrap_or_else(|_| "300.0".to_string()) // 5 minutes
                 .parse()?,
-            production: env::var("PRODUCTION")
-                .unwrap_or_else(|_| "false".to_string())
-                .parse()
-                .unwrap_or(false),
+            production: match env::var("PRODUCTION") {
+                Ok(v) => v.parse()?,
+                Err(_) => false,
+            },
         })
     }
 }
@@ -82,9 +82,44 @@ mod tests {
 
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
+    struct EnvGuard<'a> {
+        _guard: std::sync::MutexGuard<'a, ()>,
+    }
+
+    impl<'a> Drop for EnvGuard<'a> {
+        fn drop(&mut self) {
+            unsafe {
+                env::remove_var("API_TOKENS");
+                env::remove_var("GITHUB_CLIENT_ID");
+                env::remove_var("GITHUB_CLIENT_SECRET");
+                env::remove_var("GITHUB_ORG");
+                env::remove_var("GITHUB_TEAM");
+                env::remove_var("SESSION_SECRET");
+                env::remove_var("PRODUCTION");
+            };
+        }
+    }
+
+    impl<'a> EnvGuard<'a> {
+        fn new() -> Self {
+            let this = Self {
+                _guard: ENV_MUTEX.lock().unwrap(),
+            };
+            unsafe {
+                env::set_var("GITHUB_CLIENT_ID", "test-client-id");
+                env::set_var("GITHUB_CLIENT_SECRET", "test-client-secret");
+                env::set_var("GITHUB_ORG", "test-org");
+                env::set_var("GITHUB_TEAM", "test-team");
+                env::set_var("SESSION_SECRET", "test-session-secret");
+            }
+
+            this
+        }
+    }
+
     #[test]
     fn test_parse_api_tokens() {
-        let _guard = ENV_MUTEX.lock().unwrap();
+        let _guard = EnvGuard::new();
         unsafe { env::set_var("API_TOKENS", "token1, token2 ,token3,,") };
         let config = Config::from_env().unwrap();
         assert_eq!(config.api_tokens.len(), 3);
@@ -96,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_empty_api_tokens() {
-        let _guard = ENV_MUTEX.lock().unwrap();
+        let _guard = EnvGuard::new();
         unsafe { env::set_var("API_TOKENS", "") };
         let config = Config::from_env().unwrap();
         assert!(config.api_tokens.is_empty());
@@ -105,7 +140,7 @@ mod tests {
 
     #[test]
     fn test_production_flag() {
-        let _guard = ENV_MUTEX.lock().unwrap();
+        let _guard = EnvGuard::new();
 
         unsafe { env::set_var("PRODUCTION", "true") };
         let config = Config::from_env().unwrap();

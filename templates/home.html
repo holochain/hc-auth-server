@@ -17,7 +17,7 @@
     {% endif %}
 
     {% if logged_in %}
-    <p>You are logged in as <strong>{{ username.as_ref().unwrap() }}</strong>!</p>
+    <p>You are logged in as <strong>{{ username.as_deref().unwrap_or("Unknown") }}</strong>!</p>
     <p><a href="/ops/auth" class="button">Go to Protected Area</a></p>
     <p><a href="/ops/logout">Logout</a></p>
     {% else %}

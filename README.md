@@ -80,7 +80,7 @@ To build a release binary:
 ```bash
 cargo build --release
 ```
-The binary will be located at `target/release/rust-oauth`.
+The binary will be located at `target/release/hc-auth-server`.
 
 #### Configuration
 
@@ -95,7 +95,7 @@ All configuration is handled via environment variables.
 | `SESSION_SECRET` | Secret key for signing session cookies (min 64 chars recommended) | - | Yes |
 | `HOST` | Interface to bind to | `127.0.0.1` | No |
 | `PORT` | Port to listen on | `3000` | No |
-| `RUST_LOG` | Tracing log level filter | `rust_oauth=debug,tower_http=debug` | No |
+| `RUST_LOG` | Tracing log level filter | `hc_auth_server=debug,tower_http=debug` | No |
 
 Helper for generating session secret:
 

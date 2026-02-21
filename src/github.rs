@@ -48,6 +48,7 @@ impl GitHubClient {
             .header(AUTHORIZATION, format!("Bearer {}", self.access_token))
             .send()
             .await?
+            .error_for_status()?
             .json::<GitHubUser>()
             .await
     }
@@ -94,6 +95,7 @@ impl GitHubClient {
             .header(AUTHORIZATION, format!("Bearer {}", self.access_token))
             .send()
             .await?
+            .error_for_status()?
             .json::<Vec<GitHubTeam>>()
             .await
     }

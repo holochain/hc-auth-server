@@ -8,8 +8,6 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-// BEGIN NEW REDIS API
-
 const STATE_PENDING: &str = "pending";
 const STATE_AUTHORIZED: &str = "authorized";
 const STATE_BLOCKED: &str = "blocked";
@@ -27,12 +25,14 @@ pub enum StorageErr {
 
     /// Other error.
     #[error("Other error: {0}")]
-    Other(#[from] Box<dyn std::error::Error>),
+    Other(#[from] Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl StorageErr {
     /// Wraps an arbitrary error into a `StorageErr::Other`.
-    pub fn other<E: Into<Box<dyn std::error::Error>>>(e: E) -> Self {
+    pub fn other<E: Into<Box<dyn std::error::Error + Send + Sync>>>(
+        e: E,
+    ) -> Self {
         Self::Other(e.into())
     }
 }
@@ -148,8 +148,6 @@ async fn redis_delete(
         .invoke_async(con)
         .await
 }
-
-// END NEW REDIS API
 
 #[derive(Debug)]
 pub struct ObjectRecord {
@@ -337,6 +335,10 @@ impl Storage {
     /// Validates an authorized key and returns an authentication token.
     ///
     /// If successful, updates the `lastAccess` timestamp and generates a new `authToken` if one doesn't exist.
+    ///
+    /// Note, the write operations in this are not atomic, but that is irrelevant,
+    /// concurrent calls may get different tokens, but the sbd/bootstrap servers using
+    /// those tokens will accept all that are returned.
     pub async fn authenticate_key(
         &self,
         key: &str,

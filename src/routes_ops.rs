@@ -256,7 +256,7 @@ pub async fn ops_logout(
 ) -> impl IntoResponse {
     let key = tower_cookies::Key::from(&state.config.session_secret);
     let signed_cookies = cookies.signed(&key);
-    // To remove, we generally just remove the cooking or overwrite with max-age 0
+    // To remove, we generally just remove the cookie or overwrite with max-age 0
     let mut cookie = tower_cookies::Cookie::new("user_session", "");
     cookie.set_path("/");
     if state.config.production {
@@ -433,24 +433,31 @@ pub async fn ops_oauth_callback(
             {
                 Ok(true) => {
                     // Valid member!
-                    if let Ok(user) = gh_client.get_user().await {
-                        let mut cookie =
-                            Cookie::new("user_session", user.login);
-                        cookie.set_path("/");
-                        cookie.set_http_only(true);
-                        if state.config.production {
-                            cookie.set_secure(true);
-                        }
+                    match gh_client.get_user().await {
+                        Ok(user) => {
+                            let mut cookie =
+                                Cookie::new("user_session", user.login);
+                            cookie.set_path("/");
+                            cookie.set_http_only(true);
+                            if state.config.production {
+                                cookie.set_secure(true);
+                            }
 
-                        let key = tower_cookies::Key::from(
-                            &state.config.session_secret,
-                        );
-                        cookies.signed(&key).add(cookie);
-                        tracing::info!(
-                            "User authenticated and verified in team."
-                        );
+                            let key = tower_cookies::Key::from(
+                                &state.config.session_secret,
+                            );
+                            cookies.signed(&key).add(cookie);
+                            tracing::info!(
+                                "User authenticated and verified in team."
+                            );
+                            Redirect::to("/").into_response()
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to get user: {}", e);
+                            Redirect::to("/?error=failed_to_get_user")
+                                .into_response()
+                        }
                     }
-                    Redirect::to("/").into_response()
                 }
                 Ok(false) => {
                     tracing::warn!(
