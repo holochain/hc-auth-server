@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Protected Area</title>
+  <style>
+    form {
+      display: inline-block;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Protected Area</h1>
+
+  <p>Welcome, <strong>{{ username }}</strong>!</p>
+
+  {% macro render_view_key_box(item_key, v_key_opt, current_val_opt) %}
+  {% if let Some(v_key) = v_key_opt %}
+  {% if v_key == item_key %}
+  <div class="key-details">
+    <h4>Value for: {{ item_key }}</h4>
+    <pre>{{ current_val_opt.as_deref().unwrap_or("null") }}</pre>
+  </div>
+  {% endif %}
+  {% endif %}
+  {% endmacro %}
+
+  <div>
+    <h3>Pending (Unauthorized)</h3>
+    <ul>
+      {% for key in unauthorized_keys %}
+      <li>
+        <div>
+          <a href="/ops/auth?view_key={{ key }}">{{ key }}</a>
+          <div>
+            <form action="/ops/approve" method="POST">
+              <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit">Approve</button>
+            </form>
+            <form action="/ops/reject" method="POST">
+              <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit">Reject</button>
+            </form>
+          </div>
+        </div>
+        {{ render_view_key_box(key, view_key, current_value) }}
+      </li>
+      {% endfor %}
+    </ul>
+
+    <h3>Authorized</h3>
+    <ul>
+      {% for key in authorized_keys %}
+      <li>
+        <div>
+          <a href="/ops/auth?view_key={{ key }}">{{ key }}</a>
+        </div>
+        {{ render_view_key_box(key, view_key, current_value) }}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div>
+    <a href="/" class="back-link">&larr; Back to Home</a>
+    <a href="/ops/logout" class="back-link">Logout</a>
+  </div>
+</body>
+
+</html>
