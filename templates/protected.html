@@ -88,6 +88,12 @@
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <button type="submit">Approve</button>
             </form>
+            <form action="/ops/delete" method="POST">
+              <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="state" value="blocked">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit">Delete</button>
+            </form>
           </div>
         </div>
         {{ render_view_key_box(key, view_key, current_value) }}

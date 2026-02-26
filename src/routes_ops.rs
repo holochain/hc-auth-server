@@ -13,6 +13,7 @@ pub fn router() -> Router<SharedState> {
         .route("/ops/auth", get(ops_auth))
         .route("/ops/approve", post(ops_approve))
         .route("/ops/block", post(ops_block))
+        .route("/ops/delete", post(ops_delete))
         .route("/ops/logout", get(ops_logout))
         .route("/ops/oauth-login", get(ops_oauth_login))
         .route("/ops/oauth-callback", get(ops_oauth_callback))
@@ -53,7 +54,7 @@ pub struct ProtectedTemplate {
 #[derive(Deserialize)]
 pub struct OpsRequest {
     pub key: String,
-    pub state: String,
+    pub state: Option<String>,
     pub csrf_token: String,
 }
 
@@ -222,7 +223,8 @@ pub async fn ops_approve(
         return Redirect::to("/").into_response();
     }
 
-    let from_state = crate::storage::State::from_str(&form.state)
+    let from_state = form.state.as_deref()
+        .and_then(crate::storage::State::from_str)
         .unwrap_or(crate::storage::State::Pending);
 
     if let Err(e) = state.storage.approve_request(&form.key, from_state).await
@@ -263,12 +265,50 @@ pub async fn ops_block(
         return Redirect::to("/").into_response();
     }
 
-    let from_state = crate::storage::State::from_str(&form.state)
+    let from_state = form.state.as_deref()
+        .and_then(crate::storage::State::from_str)
         .unwrap_or(crate::storage::State::Pending);
 
     if let Err(e) = state.storage.block_request(&form.key, from_state).await
     {
         tracing::error!("Failed to reject request: {}", e);
+    }
+
+    Redirect::to("/ops/auth").into_response()
+}
+
+/// POST /ops/delete - Deletes a specific authentication request via form submission.
+pub async fn ops_delete(
+    State(state): State<SharedState>,
+    cookies: Cookies,
+    Form(form): Form<OpsRequest>,
+) -> impl IntoResponse {
+    let key = tower_cookies::Key::from(&state.config.session_secret);
+    let signed_cookies = cookies.signed(&key);
+
+    if let Some(cookie) = signed_cookies.get("user_session") {
+        let username = cookie.value().to_string();
+        let expected_token = {
+            let csrf_tokens = state.csrf_tokens.lock().unwrap();
+            csrf_tokens.get(&username).map(|e| e.token.clone())
+        };
+
+        if expected_token.is_none()
+            || expected_token.unwrap() != form.csrf_token
+        {
+            tracing::warn!(
+                "CSRF token mismatch on delete for user: {}",
+                username
+            );
+            return Redirect::to("/ops/auth?error=invalid_csrf")
+                .into_response();
+        }
+    } else {
+        return Redirect::to("/").into_response();
+    }
+
+    if let Err(e) = state.storage.delete_request(&form.key).await {
+        tracing::error!("Failed to delete request: {}", e);
     }
 
     Redirect::to("/ops/auth").into_response()
