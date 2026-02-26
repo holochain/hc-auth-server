@@ -187,24 +187,6 @@ pub async fn redis_get_object(
     }
 }
 
-/*
-pub fn redis_list_all_keys(
-    con: &mut dyn redis::ConnectionLike,
-) -> RedisResult<HashMap<State, Vec<String>>> {
-    let mut result: HashMap<State, Vec<String>> = HashMap::new();
-
-    for state in [State::Pending, State::Authorized, State::Blocked] {
-        let members: Vec<String> = redis::cmd("SMEMBERS")
-            .arg(state_key(state))
-            .query(con)?;
-
-        result.insert(state, members);
-    }
-
-    Ok(result)
-}
-*/
-
 pub struct Storage {
     connection_manager: ConnectionManager,
     max_pending_requests: usize,
@@ -228,6 +210,60 @@ impl Storage {
         } else {
             Err("Redis configuration missing (REDIS_URL)".into())
         }
+    }
+
+    /// Returns a list of all authentication requests across all states.
+    pub async fn get_all_requests(
+        &self,
+    ) -> Result<Vec<(String, State)>, Box<dyn std::error::Error>> {
+        self.with_connection::<_, _, Vec<(String, State)>>(|mut con| async move {
+            let mut result = Vec::new();
+            for state in [State::Pending, State::Authorized, State::Blocked] {
+                let keys: Vec<String> = redis::cmd("SMEMBERS")
+                    .arg(state_key(state))
+                    .query_async(&mut con)
+                    .await?;
+                for key in keys {
+                    result.push((key, state));
+                }
+            }
+            Ok(result)
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    /// Fetches a specific authentication request's state and data.
+    pub async fn get_request(
+        &self,
+        key: &str,
+    ) -> Result<Option<(State, Value)>, Box<dyn std::error::Error>> {
+        self.with_connection::<_, _, Option<(State, Value)>>(|mut con| async move {
+            if let Some(record) = redis_get_object(&mut con, key).await? {
+                let val: Value = serde_json::from_str(&record.json)
+                    .unwrap_or(Value::String(record.json));
+                Ok(Some((record.state, val)))
+            } else {
+                Ok(None)
+            }
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    /// Transitions a request between arbitrary states.
+    pub async fn transition_request(
+        &self,
+        key: &str,
+        from_state: State,
+        to_state: State,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.with_connection::<_, _, ()>(|mut con| async move {
+            redis_transition(&mut con, key, from_state, to_state).await?;
+            Ok(())
+        })
+        .await
+        .map_err(Into::into)
     }
 
     /// Helper to execute an async closure with a cloned connection manager.

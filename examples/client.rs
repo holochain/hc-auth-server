@@ -75,8 +75,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nStep 2: Automated Management (using API token)");
     let auth_header = format!("Bearer {}", api_token);
 
-    // 4.1. List pending requests
-    println!("  Listing pending requests...");
+    // 4.1. List all requests
+    println!("  Listing all requests...");
     let list_resp = client
         .get(format!("{}/api/list", base_url))
         .header("Authorization", &auth_header)
@@ -84,47 +84,87 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     if !list_resp.status().is_success() {
-        eprintln!("Failed to list pending: {}", list_resp.status());
+        eprintln!("Failed to list: {}", list_resp.status());
         return Ok(());
     }
-    let pending_keys: Vec<String> = list_resp.json().await?;
-    if !pending_keys.contains(&pubkey_b64) {
+    let requests: Vec<serde_json::Value> = list_resp.json().await?;
+    let found = requests.iter().any(|r| {
+        r.get("pubKey").and_then(|v| v.as_str()) == Some(&pubkey_b64)
+    });
+    if !found {
         eprintln!(
-            "Error: Newly created key {} not found in pending list!",
+            "Error: Newly created key {} not found in list!",
             pubkey_b64
         );
         return Ok(());
     }
-    println!("  Confirm: Key is in pending list.");
+    println!("  Confirm: Key is in the list.");
 
-    // 4.2. Get pending request data
-    println!("  Verifying request data...");
+    // 4.2. Verify it's pending
+    println!("  Verifying state is pending...");
     let get_resp = client
         .get(format!("{}/api/get/{}", base_url, pubkey_b64))
         .header("Authorization", &auth_header)
         .send()
         .await?;
-
-    if !get_resp.status().is_success() {
-        eprintln!("Failed to get request data: {}", get_resp.status());
+    let data: serde_json::Value = get_resp.json().await?;
+    if data.get("state").and_then(|v| v.as_str()) != Some("pending") {
+        eprintln!("Error: Expected state 'pending', got {:?}", data.get("state"));
         return Ok(());
     }
-    let data: serde_json::Value = get_resp.json().await?;
-    println!("  Data on server: {}", data);
+    println!("  Success: State is pending.");
 
-    // 4.3. Approve the request
-    println!("  Approving request...");
-    let approve_resp = client
-        .post(format!("{}/api/approve/{}", base_url, pubkey_b64))
+    // 4.3. Transition to blocked
+    println!("  Transitioning to blocked...");
+    let transition_resp = client
+        .post(format!("{}/api/transition", base_url))
         .header("Authorization", &auth_header)
+        .json(&json!({
+            "pubKey": pubkey_b64,
+            "oldState": "pending",
+            "newState": "blocked"
+        }))
         .send()
         .await?;
 
-    if !approve_resp.status().is_success() {
-        eprintln!("Failed to approve request: {}", approve_resp.status());
+    if !transition_resp.status().is_success() {
+        eprintln!("Failed to block: {}", transition_resp.status());
         return Ok(());
     }
-    println!("  Success! Request approved.");
+    println!("  Success: Transitioned to blocked.");
+
+    // 4.4. Verify it's blocked
+    println!("  Verifying state is blocked...");
+    let get_resp = client
+        .get(format!("{}/api/get/{}", base_url, pubkey_b64))
+        .header("Authorization", &auth_header)
+        .send()
+        .await?;
+    let data: serde_json::Value = get_resp.json().await?;
+    if data.get("state").and_then(|v| v.as_str()) != Some("blocked") {
+        eprintln!("Error: Expected state 'blocked', got {:?}", data.get("state"));
+        return Ok(());
+    }
+    println!("  Success: State is blocked.");
+
+    // 4.5. Transition to authorized
+    println!("  Transitioning to authorized...");
+    let transition_resp = client
+        .post(format!("{}/api/transition", base_url))
+        .header("Authorization", &auth_header)
+        .json(&json!({
+            "pubKey": pubkey_b64,
+            "oldState": "blocked",
+            "newState": "authorized"
+        }))
+        .send()
+        .await?;
+
+    if !transition_resp.status().is_success() {
+        eprintln!("Failed to authorize: {}", transition_resp.status());
+        return Ok(());
+    }
+    println!("  Success: Transitioned to authorized.");
 
     // 5. Verify Authentication
     println!("\nStep 3: Verifying final authentication...");

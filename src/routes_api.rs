@@ -11,10 +11,9 @@ use axum::{
 /// Returns the router for the `/api` prefix.
 pub fn router() -> Router<SharedState> {
     Router::new()
-        .route("/list", get(api_list_pending))
-        .route("/get/{key}", get(api_get_pending))
-        .route("/approve/{key}", post(api_approve_pending))
-        .route("/reject/{key}", post(api_reject_pending))
+        .route("/list", get(api_list))
+        .route("/get/{key}", get(api_get))
+        .route("/transition", post(api_transition))
 }
 
 /// Middleware to authenticate API requests using a Bearer token.
@@ -29,70 +28,91 @@ pub async fn api_auth(
     next.run(request).await
 }
 
-/// GET /api/list - Lists all pending authentication request keys.
-pub async fn api_list_pending(
-    State(state): State<SharedState>,
-) -> impl IntoResponse {
-    match state.storage.get_pending_requests().await {
-        Ok(pending) => {
-            let keys: Vec<String> =
-                pending.keys().cloned().collect::<Vec<String>>();
-            Json(keys).into_response()
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiListResponse {
+    state: &'static str,
+    pub_key: String,
+}
+
+/// GET /api/list - Lists all authentication requests with their states.
+pub async fn api_list(State(state): State<SharedState>) -> impl IntoResponse {
+    match state.storage.get_all_requests().await {
+        Ok(requests) => {
+            let resp: Vec<ApiListResponse> = requests
+                .into_iter()
+                .map(|(pub_key, s)| ApiListResponse {
+                    state: s.as_str(),
+                    pub_key,
+                })
+                .collect();
+            Json(resp).into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get pending requests: {}", e);
+            tracing::error!("Failed to get requests: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
 }
 
-/// GET /api/get/{key} - Retrieves raw JSON data for a specific pending request.
-pub async fn api_get_pending(
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiGetResponse {
+    state: &'static str,
+    pub_key: String,
+    data: serde_json::Value,
+}
+
+/// GET /api/get/{key} - Retrieves full data for a specific request.
+pub async fn api_get(
     State(state): State<SharedState>,
     Path(key): Path<String>,
 ) -> impl IntoResponse {
-    match state.storage.get_pending_requests().await {
-        Ok(pending) => {
-            if let Some(data) = pending.get(&key) {
-                Json(data.clone()).into_response()
-            } else {
-                StatusCode::NOT_FOUND.into_response()
-            }
-        }
+    match state.storage.get_request(&key).await {
+        Ok(Some((s, data))) => Json(ApiGetResponse {
+            state: s.as_str(),
+            pub_key: key,
+            data,
+        })
+        .into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(e) => {
-            tracing::error!("Failed to get pending requests: {}", e);
+            tracing::error!("Failed to get request: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
 }
 
-/// POST /api/approve/{key} - Approves a pending authentication request.
-pub async fn api_approve_pending(
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransitionRequest {
+    pub pub_key: String,
+    pub old_state: String,
+    pub new_state: String,
+}
+
+/// POST /api/transition - Performs a state transition.
+pub async fn api_transition(
     State(state): State<SharedState>,
-    Path(key): Path<String>,
+    Json(payload): Json<TransitionRequest>,
 ) -> impl IntoResponse {
+    let from = match crate::storage::State::from_str(&payload.old_state) {
+        Some(s) => s,
+        None => return StatusCode::BAD_REQUEST.into_response(),
+    };
+    let to = match crate::storage::State::from_str(&payload.new_state) {
+        Some(s) => s,
+        None => return StatusCode::BAD_REQUEST.into_response(),
+    };
+
     match state
         .storage
-        .approve_request(&key, crate::storage::State::Pending)
+        .transition_request(&payload.pub_key, from, to)
         .await
     {
         Ok(_) => StatusCode::OK.into_response(),
         Err(e) => {
-            tracing::error!("Failed to approve request: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
-
-/// POST /api/reject/{key} - Rejects and deletes a pending authentication request.
-pub async fn api_reject_pending(
-    State(state): State<SharedState>,
-    Path(key): Path<String>,
-) -> impl IntoResponse {
-    match state.storage.delete_request(&key).await {
-        Ok(_) => StatusCode::OK.into_response(),
-        Err(e) => {
-            tracing::error!("Failed to reject request: {}", e);
+            tracing::error!("Failed to transition request: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }

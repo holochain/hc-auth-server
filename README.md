@@ -146,10 +146,14 @@ These routes provide programmatic access to management functions. All routes req
 
 | Route | Method | Description | Path Elements | Query Params | Error Codes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `/api/list` | `GET` | List all pending request keys. | None | None | 401 (Unauthorized), 500 (Server Error) |
-| `/api/get/{key}` | `GET` | Get details for a specific key. | `{key}`: Base64URL encoded public key. | None | 401 (Unauthorized), 404 (Not Found) |
-| `/api/approve/{key}`| `POST`| Approve a pending request. | `{key}`: Base64URL encoded public key. | None | 401 (Unauthorized), 500 (Server Error) |
-| `/api/reject/{key}` | `POST`| Reject a pending request. | `{key}`: Base64URL encoded public key. | None | 401 (Unauthorized), 500 (Server Error) |
+| `/api/list` | `GET` | List all requests with states. | None | None | 401 (Unauthorized), 500 (Server Error) |
+| `/api/get/{key}` | `GET` | Get details (state, data) for a specific key. | `{key}`: Base64URL encoded public key. | None | 401 (Unauthorized), 404 (Not Found) |
+| `/api/transition` | `POST` | Move a key between states. | None | None | 400 (Invalid state), 401 (Unauthorized), 500 (Error) |
+
+**Notes on API routes**:
+- `/api/list` returns `[{ "state": "...", "pubKey": "..." }, ...]`.
+- `/api/get/{key}` returns `{ "state": "...", "pubKey": "...", "data": { ... } }`.
+- `/api/transition` body: `{ "pubKey": "...", "oldState": "...", "newState": "..." }`. Valid states: `pending`, `authorized`, `blocked`.
 
 ---
 
