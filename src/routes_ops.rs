@@ -44,6 +44,7 @@ pub struct ProtectedTemplate {
     pub username: String,
     pub authorized_keys: Vec<String>,
     pub unauthorized_keys: Vec<String>,
+    pub blocked_keys: Vec<String>,
     pub view_key: Option<String>,
     pub current_value: Option<String>,
     pub csrf_token: String,
@@ -129,13 +130,22 @@ pub async fn ops_auth(
             .await
             .unwrap_or_default();
 
+        let blocked_map = state
+            .storage
+            .get_blocked_requests()
+            .await
+            .unwrap_or_default();
+
         let mut authorized_keys: Vec<String> =
             authorized_map.keys().cloned().collect();
         let mut unauthorized_keys: Vec<String> =
             pending_map.keys().cloned().collect();
+        let mut blocked_keys: Vec<String> =
+            blocked_map.keys().cloned().collect();
 
         authorized_keys.sort();
         unauthorized_keys.sort();
+        blocked_keys.sort();
 
         let view_key = params.get("view_key").cloned();
 
@@ -152,6 +162,11 @@ pub async fn ops_auth(
                     serde_json::to_string_pretty(val)
                         .unwrap_or_else(|_| val.to_string()),
                 );
+            } else if let Some(val) = blocked_map.get(k) {
+                current_value = Some(
+                    serde_json::to_string_pretty(val)
+                        .unwrap_or_else(|_| val.to_string()),
+                );
             }
         }
 
@@ -159,6 +174,7 @@ pub async fn ops_auth(
             username: cookie.value().to_string(),
             authorized_keys,
             unauthorized_keys,
+            blocked_keys,
             view_key,
             current_value,
             csrf_token,

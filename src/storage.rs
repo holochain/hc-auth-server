@@ -322,6 +322,13 @@ impl Storage {
         self.get_all_by_state(State::Authorized).await
     }
 
+    /// Returns a map of all currently blocked authentication keys.
+    pub async fn get_blocked_requests(
+        &self,
+    ) -> Result<HashMap<String, Value>, Box<dyn std::error::Error>> {
+        self.get_all_by_state(State::Blocked).await
+    }
+
     /// Internal helper to fetch all records in a specific state.
     async fn get_all_by_state(
         &self,
