@@ -280,6 +280,21 @@ impl Storage {
         .map_err(Into::into)
     }
 
+    /// Transitions a request to the blocked state.
+    pub async fn block_request(
+        &self,
+        key: &str,
+        from_state: State,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.with_connection(|mut con| async move {
+            redis_transition(&mut con, key, from_state, State::Blocked)
+                .await?;
+            Ok(())
+        })
+        .await
+        .map_err(Into::into)
+    }
+
     /// Deletes an authentication request from storage.
     pub async fn delete_request(
         &self,

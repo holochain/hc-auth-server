@@ -38,13 +38,15 @@
           <div>
             <form action="/ops/approve" method="POST">
               <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="state" value="pending">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <button type="submit">Approve</button>
             </form>
-            <form action="/ops/reject" method="POST">
+            <form action="/ops/block" method="POST">
               <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="state" value="pending">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-              <button type="submit">Reject</button>
+              <button type="submit">Block</button>
             </form>
           </div>
         </div>
@@ -59,6 +61,14 @@
       <li>
         <div>
           <a href="/ops/auth?view_key={{ key }}">{{ key }}</a>
+          <div>
+            <form action="/ops/reject" method="POST">
+              <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="state" value="authorized">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit">Block</button>
+            </form>
+          </div>
         </div>
         {{ render_view_key_box(key, view_key, current_value) }}
       </li>

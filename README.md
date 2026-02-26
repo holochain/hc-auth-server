@@ -136,7 +136,7 @@ These routes are used by administrators via the web interface.
 | `/` | `GET` | Home page. | None | `error`: Optional error message. | 500 (Render Error) |
 | `/ops/auth` | `GET` | Management dashboard (requires login). | None | `view_key`: Optional key to view details. | 302 (Redirect if not logged in) |
 | `/ops/approve` | `POST` | Approve a pending request (requires CSRF).| None | None | 302 (Redirect on success/error) |
-| `/ops/reject` | `POST` | Reject/Delete a request (requires CSRF). | None | None | 302 (Redirect on success/error) |
+| `/ops/block` | `POST` | Block a request (requires CSRF). | None | None | 302 (Redirect on success/error) |
 | `/ops/logout` | `GET` | Log out from the management session. | None | None | 302 (Redirect to `/`) |
 | `/ops/oauth-login` | `GET` | Initiate GitHub OAuth login. | None | None | 302 (Redirect to GitHub) |
 | `/ops/oauth-callback`| `GET` | GitHub OAuth callback handler. | None | `code`, `state` | 302 (Redirect to home/error) |

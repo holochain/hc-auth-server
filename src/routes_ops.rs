@@ -12,7 +12,7 @@ pub fn router() -> Router<SharedState> {
         .route("/", get(ops_home))
         .route("/ops/auth", get(ops_auth))
         .route("/ops/approve", post(ops_approve))
-        .route("/ops/reject", post(ops_reject))
+        .route("/ops/block", post(ops_block))
         .route("/ops/logout", get(ops_logout))
         .route("/ops/oauth-login", get(ops_oauth_login))
         .route("/ops/oauth-callback", get(ops_oauth_callback))
@@ -50,8 +50,9 @@ pub struct ProtectedTemplate {
 }
 
 #[derive(Deserialize)]
-pub struct ApproveRequest {
+pub struct OpsRequest {
     pub key: String,
+    pub state: String,
     pub csrf_token: String,
 }
 
@@ -179,7 +180,7 @@ pub async fn ops_auth(
 pub async fn ops_approve(
     State(state): State<SharedState>,
     cookies: Cookies,
-    Form(form): Form<ApproveRequest>,
+    Form(form): Form<OpsRequest>,
 ) -> impl IntoResponse {
     let key = tower_cookies::Key::from(&state.config.session_secret);
     let signed_cookies = cookies.signed(&key);
@@ -212,11 +213,11 @@ pub async fn ops_approve(
     Redirect::to("/ops/auth").into_response()
 }
 
-/// POST /ops/reject - Rejects a specific authentication request via form submission.
-pub async fn ops_reject(
+/// POST /ops/block - Blocks a specific authentication request via form submission.
+pub async fn ops_block(
     State(state): State<SharedState>,
     cookies: Cookies,
-    Form(form): Form<ApproveRequest>,
+    Form(form): Form<OpsRequest>,
 ) -> impl IntoResponse {
     let key = tower_cookies::Key::from(&state.config.session_secret);
     let signed_cookies = cookies.signed(&key);
@@ -242,7 +243,11 @@ pub async fn ops_reject(
         return Redirect::to("/").into_response();
     }
 
-    if let Err(e) = state.storage.delete_request(&form.key).await {
+    let from_state = crate::storage::State::from_str(&form.state)
+        .unwrap_or(crate::storage::State::Pending);
+
+    if let Err(e) = state.storage.block_request(&form.key, from_state).await
+    {
         tracing::error!("Failed to reject request: {}", e);
     }
 
