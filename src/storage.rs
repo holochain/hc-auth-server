@@ -8,8 +8,8 @@ use std::collections::HashMap;
 mod lua;
 mod types;
 
-pub use types::{AuthResult, State, Storage, StorageErr};
 use types::ObjectRecord;
+pub use types::{AuthResult, State, Storage, StorageErr};
 
 /// Helper to parse a JSON string into a `Value`, falling back to a string value if parsing fails.
 fn parse_value(json: &str) -> Value {
@@ -30,7 +30,6 @@ pub(crate) fn state_key(state: State) -> String {
 pub(crate) fn now_secs() -> String {
     (crate::now() as u64).to_string()
 }
-
 
 /// Fetches the state and JSON data for a specific authentication key.
 async fn redis_get_object(
@@ -74,19 +73,22 @@ impl Storage {
     pub async fn get_all_requests(
         &self,
     ) -> Result<Vec<(String, State)>, Box<dyn std::error::Error>> {
-        self.with_connection::<_, _, Vec<(String, State)>>(|mut con| async move {
-            let mut result = Vec::new();
-            for state in [State::Pending, State::Authorized, State::Blocked] {
-                let keys: Vec<String> = redis::cmd("SMEMBERS")
-                    .arg(state_key(state))
-                    .query_async(&mut con)
-                    .await?;
-                for key in keys {
-                    result.push((key, state));
+        self.with_connection::<_, _, Vec<(String, State)>>(
+            |mut con| async move {
+                let mut result = Vec::new();
+                for state in [State::Pending, State::Authorized, State::Blocked]
+                {
+                    let keys: Vec<String> = redis::cmd("SMEMBERS")
+                        .arg(state_key(state))
+                        .query_async(&mut con)
+                        .await?;
+                    for key in keys {
+                        result.push((key, state));
+                    }
                 }
-            }
-            Ok(result)
-        })
+                Ok(result)
+            },
+        )
         .await
         .map_err(Into::into)
     }
@@ -96,13 +98,15 @@ impl Storage {
         &self,
         key: &str,
     ) -> Result<Option<(State, Value)>, Box<dyn std::error::Error>> {
-        self.with_connection::<_, _, Option<(State, Value)>>(|mut con| async move {
-            if let Some(record) = redis_get_object(&mut con, key).await? {
-                Ok(Some((record.state, parse_value(&record.json))))
-            } else {
-                Ok(None)
-            }
-        })
+        self.with_connection::<_, _, Option<(State, Value)>>(
+            |mut con| async move {
+                if let Some(record) = redis_get_object(&mut con, key).await? {
+                    Ok(Some((record.state, parse_value(&record.json))))
+                } else {
+                    Ok(None)
+                }
+            },
+        )
         .await
         .map_err(Into::into)
     }
@@ -173,7 +177,8 @@ impl Storage {
         key: &str,
         from_state: State,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        self.transition_request(key, from_state, State::Authorized).await
+        self.transition_request(key, from_state, State::Authorized)
+            .await
     }
 
     /// Transitions a request to the blocked state.
@@ -182,7 +187,8 @@ impl Storage {
         key: &str,
         from_state: State,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        self.transition_request(key, from_state, State::Blocked).await
+        self.transition_request(key, from_state, State::Blocked)
+            .await
     }
 
     /// Deletes an authentication request from storage.
@@ -225,7 +231,8 @@ impl Storage {
         state: State,
     ) -> Result<HashMap<String, Value>, Box<dyn std::error::Error>> {
         self.with_connection(|mut con| async move {
-            let res: Vec<String> = lua::get_all_by_state(&mut con, state).await?;
+            let res: Vec<String> =
+                lua::get_all_by_state(&mut con, state).await?;
 
             let mut result = HashMap::new();
             for chunk in res.chunks_exact(2) {

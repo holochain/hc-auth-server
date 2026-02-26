@@ -88,14 +88,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     let requests: Vec<serde_json::Value> = list_resp.json().await?;
-    let found = requests.iter().any(|r| {
-        r.get("pubKey").and_then(|v| v.as_str()) == Some(&pubkey_b64)
-    });
+    let found = requests
+        .iter()
+        .any(|r| r.get("pubKey").and_then(|v| v.as_str()) == Some(&pubkey_b64));
     if !found {
-        eprintln!(
-            "Error: Newly created key {} not found in list!",
-            pubkey_b64
-        );
+        eprintln!("Error: Newly created key {} not found in list!", pubkey_b64);
         return Ok(());
     }
     println!("  Confirm: Key is in the list.");
@@ -109,7 +106,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     let data: serde_json::Value = get_resp.json().await?;
     if data.get("state").and_then(|v| v.as_str()) != Some("pending") {
-        eprintln!("Error: Expected state 'pending', got {:?}", data.get("state"));
+        eprintln!(
+            "Error: Expected state 'pending', got {:?}",
+            data.get("state")
+        );
         return Ok(());
     }
     println!("  Success: State is pending.");
@@ -142,7 +142,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     let data: serde_json::Value = get_resp.json().await?;
     if data.get("state").and_then(|v| v.as_str()) != Some("blocked") {
-        eprintln!("Error: Expected state 'blocked', got {:?}", data.get("state"));
+        eprintln!(
+            "Error: Expected state 'blocked', got {:?}",
+            data.get("state")
+        );
         return Ok(());
     }
     println!("  Success: State is blocked.");
@@ -169,7 +172,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 5. Verify Authentication
     println!("\nStep 3: Verifying final authentication...");
 
-    let resp = perform_auth(&client, base_url, &signing_key, &pubkey_b64).await?;
+    let resp =
+        perform_auth(&client, base_url, &signing_key, &pubkey_b64).await?;
 
     if resp.status().is_success() {
         println!("  Authentication Successful!");

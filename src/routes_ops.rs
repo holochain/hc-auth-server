@@ -223,12 +223,13 @@ pub async fn ops_approve(
         return Redirect::to("/").into_response();
     }
 
-    let from_state = form.state.as_deref()
+    let from_state = form
+        .state
+        .as_deref()
         .and_then(crate::storage::State::from_str)
         .unwrap_or(crate::storage::State::Pending);
 
-    if let Err(e) = state.storage.approve_request(&form.key, from_state).await
-    {
+    if let Err(e) = state.storage.approve_request(&form.key, from_state).await {
         tracing::error!("Failed to approve request: {}", e);
     }
 
@@ -265,12 +266,13 @@ pub async fn ops_block(
         return Redirect::to("/").into_response();
     }
 
-    let from_state = form.state.as_deref()
+    let from_state = form
+        .state
+        .as_deref()
         .and_then(crate::storage::State::from_str)
         .unwrap_or(crate::storage::State::Pending);
 
-    if let Err(e) = state.storage.block_request(&form.key, from_state).await
-    {
+    if let Err(e) = state.storage.block_request(&form.key, from_state).await {
         tracing::error!("Failed to reject request: {}", e);
     }
 

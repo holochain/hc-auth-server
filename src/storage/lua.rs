@@ -1,6 +1,6 @@
+use super::types::State;
 use redis::{RedisResult, Script};
 use std::sync::OnceLock;
-use super::types::State;
 
 /// Formats the Redis key for an authentication record.
 fn auth_key(id: &str) -> String {
@@ -26,7 +26,8 @@ pub(crate) async fn add_pending(
     max_pending: usize,
 ) -> RedisResult<()> {
     static SCRIPT: OnceLock<Script> = OnceLock::new();
-    let script = SCRIPT.get_or_init(|| Script::new(include_str!("add_pending.lua")));
+    let script =
+        SCRIPT.get_or_init(|| Script::new(include_str!("add_pending.lua")));
     script
         .key(auth_key(key))
         .key(state_key(state))
@@ -46,7 +47,8 @@ pub(crate) async fn transition(
     to_state: State,
 ) -> RedisResult<()> {
     static SCRIPT: OnceLock<Script> = OnceLock::new();
-    let script = SCRIPT.get_or_init(|| Script::new(include_str!("transition.lua")));
+    let script =
+        SCRIPT.get_or_init(|| Script::new(include_str!("transition.lua")));
     script
         .key(auth_key(key))
         .key(state_key(from_state))
@@ -66,11 +68,7 @@ pub(crate) async fn delete(
 ) -> RedisResult<()> {
     static SCRIPT: OnceLock<Script> = OnceLock::new();
     let script = SCRIPT.get_or_init(|| Script::new(include_str!("delete.lua")));
-    script
-        .key(auth_key(key))
-        .arg(key)
-        .invoke_async(con)
-        .await
+    script.key(auth_key(key)).arg(key).invoke_async(con).await
 }
 
 /// Fetches all records in a specific state.
@@ -79,9 +77,7 @@ pub(crate) async fn get_all_by_state(
     state: State,
 ) -> RedisResult<Vec<String>> {
     static SCRIPT: OnceLock<Script> = OnceLock::new();
-    let script = SCRIPT.get_or_init(|| Script::new(include_str!("get_all_by_state.lua")));
-    script
-        .key(state_key(state))
-        .invoke_async(con)
-        .await
+    let script = SCRIPT
+        .get_or_init(|| Script::new(include_str!("get_all_by_state.lua")));
+    script.key(state_key(state)).invoke_async(con).await
 }
