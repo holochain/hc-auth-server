@@ -266,13 +266,14 @@ impl Storage {
         .await
     }
 
-    /// Transitions a pending request to the authorized state.
+    /// Transitions a request to the authorized state.
     pub async fn approve_request(
         &self,
         key: &str,
+        from_state: State,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.with_connection(|mut con| async move {
-            redis_transition(&mut con, key, State::Pending, State::Authorized)
+            redis_transition(&mut con, key, from_state, State::Authorized)
                 .await?;
             Ok(())
         })

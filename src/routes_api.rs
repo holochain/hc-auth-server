@@ -71,7 +71,11 @@ pub async fn api_approve_pending(
     State(state): State<SharedState>,
     Path(key): Path<String>,
 ) -> impl IntoResponse {
-    match state.storage.approve_request(&key).await {
+    match state
+        .storage
+        .approve_request(&key, crate::storage::State::Pending)
+        .await
+    {
         Ok(_) => StatusCode::OK.into_response(),
         Err(e) => {
             tracing::error!("Failed to approve request: {}", e);

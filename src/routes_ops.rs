@@ -222,7 +222,11 @@ pub async fn ops_approve(
         return Redirect::to("/").into_response();
     }
 
-    if let Err(e) = state.storage.approve_request(&form.key).await {
+    let from_state = crate::storage::State::from_str(&form.state)
+        .unwrap_or(crate::storage::State::Pending);
+
+    if let Err(e) = state.storage.approve_request(&form.key, from_state).await
+    {
         tracing::error!("Failed to approve request: {}", e);
     }
 
