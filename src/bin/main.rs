@@ -4,25 +4,9 @@ use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod config;
-mod github;
-mod routes_api;
-mod routes_client;
-mod routes_ops;
-mod state;
-mod storage;
-
-use config::Config;
-use state::AppState;
-use storage::Storage;
-
-/// Returns the current unix timestamp in seconds.
-fn now() -> f64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_secs_f64()
-}
+use hc_auth_server::{
+    AppState, Config, Storage, routes_api, routes_client, routes_ops,
+};
 
 /// Main entry point for the authentication server.
 ///

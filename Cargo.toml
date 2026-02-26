@@ -2,6 +2,15 @@
 name = "hc-auth-server"
 version = "0.0.1"
 edition = "2024"
+default-run = "hc-auth-server"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hc-auth-server"
+path = "src/bin/main.rs"
+
 
 [dependencies]
 askama = "0.15.4"

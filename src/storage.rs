@@ -45,7 +45,7 @@ async fn redis_get_object(
         .query_async(con)
         .await?;
 
-    match (state.and_then(|s| State::from_str(&s)), json) {
+    match (state.and_then(|s| s.parse::<State>().ok()), json) {
         (Some(state), Some(json)) => Ok(Some(ObjectRecord { state, json })),
         _ => Ok(None),
     }

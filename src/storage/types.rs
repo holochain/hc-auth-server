@@ -37,17 +37,20 @@ pub enum State {
     Blocked,
 }
 
-impl State {
-    /// Parses a string into a `State`.
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for State {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            STATE_PENDING => Some(Self::Pending),
-            STATE_AUTHORIZED => Some(Self::Authorized),
-            STATE_BLOCKED => Some(Self::Blocked),
-            _ => None,
+            STATE_PENDING => Ok(Self::Pending),
+            STATE_AUTHORIZED => Ok(Self::Authorized),
+            STATE_BLOCKED => Ok(Self::Blocked),
+            _ => Err(()),
         }
     }
+}
 
+impl State {
     /// Returns the string representation of the `State`.
     pub fn as_str(&self) -> &'static str {
         match self {

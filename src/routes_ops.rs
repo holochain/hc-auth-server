@@ -226,7 +226,7 @@ pub async fn ops_approve(
     let from_state = form
         .state
         .as_deref()
-        .and_then(crate::storage::State::from_str)
+        .and_then(|s| s.parse::<crate::storage::State>().ok())
         .unwrap_or(crate::storage::State::Pending);
 
     if let Err(e) = state.storage.approve_request(&form.key, from_state).await {
@@ -269,7 +269,7 @@ pub async fn ops_block(
     let from_state = form
         .state
         .as_deref()
-        .and_then(crate::storage::State::from_str)
+        .and_then(|s| s.parse::<crate::storage::State>().ok())
         .unwrap_or(crate::storage::State::Pending);
 
     if let Err(e) = state.storage.block_request(&form.key, from_state).await {

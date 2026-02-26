@@ -28,9 +28,10 @@ pub async fn api_auth(
     next.run(request).await
 }
 
-#[derive(serde::Serialize)]
+/// Response type when calling /api/list.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ApiListResponse {
+pub struct ApiListResponse {
     state: &'static str,
     pub_key: String,
 }
@@ -55,9 +56,10 @@ pub async fn api_list(State(state): State<SharedState>) -> impl IntoResponse {
     }
 }
 
-#[derive(serde::Serialize)]
+/// Response type when calling /api/get/{key}.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ApiGetResponse {
+pub struct ApiGetResponse {
     state: &'static str,
     pub_key: String,
     data: serde_json::Value,
@@ -83,7 +85,8 @@ pub async fn api_get(
     }
 }
 
-#[derive(serde::Deserialize)]
+/// Payload when calling /api/transition.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransitionRequest {
     pub pub_key: String,
@@ -96,13 +99,13 @@ pub async fn api_transition(
     State(state): State<SharedState>,
     Json(payload): Json<TransitionRequest>,
 ) -> impl IntoResponse {
-    let from = match crate::storage::State::from_str(&payload.old_state) {
-        Some(s) => s,
-        None => return StatusCode::BAD_REQUEST.into_response(),
+    let from = match payload.old_state.parse::<crate::storage::State>() {
+        Ok(s) => s,
+        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
     };
-    let to = match crate::storage::State::from_str(&payload.new_state) {
-        Some(s) => s,
-        None => return StatusCode::BAD_REQUEST.into_response(),
+    let to = match payload.new_state.parse::<crate::storage::State>() {
+        Ok(s) => s,
+        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
     };
 
     match state
