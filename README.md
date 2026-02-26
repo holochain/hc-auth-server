@@ -1,6 +1,6 @@
-# Rust OAuth Service
+# Holochain Auth Server
 
-A Rust-based web service implementing OAuth2 authentication with GitHub, verifying organization and team membership.
+A Rust-based authentication server fulfilling <https://github.com/holochain/sbd/blob/main/spec-auth.md>, and including an human interactive ops console and automation oriented administration api.
 
 ## For Developers
 
