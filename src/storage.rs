@@ -66,6 +66,18 @@ impl State {
     }
 }
 
+/// Result of an authentication attempt.
+pub enum AuthResult {
+    /// Key is authorized and a token is returned.
+    Authorized(String),
+    /// Key is still in pending status.
+    Pending,
+    /// Key is blocked.
+    Blocked,
+    /// Key not found.
+    NotFound,
+}
+
 /// Loads and caches the Lua script for adding a pending request.
 fn lua_add_pending() -> &'static Script {
     static ADD_PENDING: OnceLock<Script> = OnceLock::new();
@@ -365,11 +377,17 @@ impl Storage {
     pub async fn authenticate_key(
         &self,
         key: &str,
-    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    ) -> Result<AuthResult, Box<dyn std::error::Error>> {
         self.with_connection(|mut con| async move {
             if let Some(record) = redis_get_object(&mut con, key).await? {
+                if record.state == State::Pending {
+                    return Ok(AuthResult::Pending);
+                }
+                if record.state == State::Blocked {
+                    return Ok(AuthResult::Blocked);
+                }
                 if record.state != State::Authorized {
-                    return Ok(None);
+                    return Ok(AuthResult::NotFound);
                 }
 
                 let mut json_val: Value = serde_json::from_str(&record.json)
@@ -417,12 +435,12 @@ impl Storage {
                         .query_async(&mut con)
                         .await?;
 
-                    Ok(Some(token))
+                    Ok(AuthResult::Authorized(token))
                 } else {
-                    Ok(None)
+                    Ok(AuthResult::NotFound)
                 }
             } else {
-                Ok(None)
+                Ok(AuthResult::NotFound)
             }
         })
         .await

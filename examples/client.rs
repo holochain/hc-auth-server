@@ -57,6 +57,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("  Success!");
 
+    // 3.1 Verify 202 response for pending key
+    println!("\nStep 1.1: Verifying 202 ACCEPTED for pending key...");
+    let pending_auth_resp =
+        perform_auth(&client, base_url, &signing_key, &pubkey_b64).await?;
+    if pending_auth_resp.status() == reqwest::StatusCode::ACCEPTED {
+        println!("  Success! Received 202 ACCEPTED for pending key.");
+    } else {
+        eprintln!(
+            "  Error: Expected 202 ACCEPTED, got {}",
+            pending_auth_resp.status()
+        );
+        return Ok(());
+    }
+
     // 4. Automated Management (using API Token)
     println!("\nStep 2: Automated Management (using API token)");
     let auth_header = format!("Bearer {}", api_token);
@@ -115,31 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 5. Verify Authentication
     println!("\nStep 3: Verifying final authentication...");
 
-    // 5.1. Get fresh payload from /now
-    let now_url = format!("{}/now", base_url);
-    let now_resp = client.get(&now_url).send().await?.error_for_status()?;
-    let payload_b64 = now_resp.text().await?;
-    let payload_bytes = BASE64_URL_SAFE_NO_PAD.decode(&payload_b64)?;
-
-    // 5.2. Sign the payload
-    use ed25519_dalek::Signer;
-    let signature = signing_key.sign(&payload_bytes);
-    let signature_b64 = BASE64_URL_SAFE_NO_PAD.encode(signature.to_bytes());
-
-    let auth_body = json!({
-        "pubKey": pubkey_b64,
-        "payload": payload_b64,
-        "signature": signature_b64,
-    });
-
-    // 5.3. Authenticate
-    let auth_url = format!("{}/authenticate", base_url);
-    let resp = client
-        .put(&auth_url)
-        .header("Content-Type", "application/octet-stream")
-        .body(auth_body.to_string())
-        .send()
-        .await?;
+    let resp = perform_auth(&client, base_url, &signing_key, &pubkey_b64).await?;
 
     if resp.status().is_success() {
         println!("  Authentication Successful!");
@@ -156,4 +146,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+/// Helper function to perform the authentication handshake.
+async fn perform_auth(
+    client: &reqwest::Client,
+    base_url: &str,
+    signing_key: &ed25519_dalek::SigningKey,
+    pubkey_b64: &str,
+) -> Result<reqwest::Response, Box<dyn std::error::Error>> {
+    // Get fresh payload from /now
+    let now_url = format!("{}/now", base_url);
+    let now_resp = client.get(&now_url).send().await?.error_for_status()?;
+    let payload_b64 = now_resp.text().await?;
+    let payload_bytes = BASE64_URL_SAFE_NO_PAD.decode(&payload_b64)?;
+
+    // Sign the payload
+    use ed25519_dalek::Signer;
+    let signature = signing_key.sign(&payload_bytes);
+    let signature_b64 = BASE64_URL_SAFE_NO_PAD.encode(signature.to_bytes());
+
+    let auth_body = json!({
+        "pubKey": pubkey_b64,
+        "payload": payload_b64,
+        "signature": signature_b64,
+    });
+
+    // Authenticate
+    let auth_url = format!("{}/authenticate", base_url);
+    let resp = client
+        .put(&auth_url)
+        .header("Content-Type", "application/octet-stream")
+        .body(auth_body.to_string())
+        .send()
+        .await?;
+
+    Ok(resp)
 }
