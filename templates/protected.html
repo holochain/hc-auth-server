@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Protected Area</title>
+  <title>HC Auth Server - Ops Console</title>
   <style>
     form {
       display: inline-block;
@@ -13,7 +13,7 @@
 </head>
 
 <body>
-  <h1>Protected Area</h1>
+  <h1>HC Auth Server - Ops Console</h1>
 
   <p>Welcome, <strong>{{ username }}</strong>!</p>
 
@@ -38,13 +38,15 @@
           <div>
             <form action="/ops/approve" method="POST">
               <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="state" value="pending">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <button type="submit">Approve</button>
             </form>
-            <form action="/ops/reject" method="POST">
+            <form action="/ops/block" method="POST">
               <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="state" value="pending">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-              <button type="submit">Reject</button>
+              <button type="submit">Block</button>
             </form>
           </div>
         </div>
@@ -59,6 +61,40 @@
       <li>
         <div>
           <a href="/ops/auth?view_key={{ key }}">{{ key }}</a>
+          <div>
+            <form action="/ops/block" method="POST">
+              <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="state" value="authorized">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit">Block</button>
+            </form>
+          </div>
+        </div>
+        {{ render_view_key_box(key, view_key, current_value) }}
+      </li>
+      {% endfor %}
+    </ul>
+
+    <h3>Blocked</h3>
+    <ul>
+      {% for key in blocked_keys %}
+      <li>
+        <div>
+          <a href="/ops/auth?view_key={{ key }}">{{ key }}</a>
+          <div>
+            <form action="/ops/approve" method="POST">
+              <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="state" value="blocked">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit">Approve</button>
+            </form>
+            <form action="/ops/delete" method="POST">
+              <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="state" value="blocked">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit">Delete</button>
+            </form>
+          </div>
         </div>
         {{ render_view_key_box(key, view_key, current_value) }}
       </li>

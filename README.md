@@ -1,6 +1,6 @@
-# Rust OAuth Service
+# Holochain Auth Server
 
-A Rust-based web service implementing OAuth2 authentication with GitHub, verifying organization and team membership.
+A Rust-based authentication server fulfilling <https://github.com/holochain/sbd/blob/main/spec-auth.md>, and including an human interactive ops console and automation oriented administration api.
 
 ## For Developers
 
@@ -136,7 +136,8 @@ These routes are used by administrators via the web interface.
 | `/` | `GET` | Home page. | None | `error`: Optional error message. | 500 (Render Error) |
 | `/ops/auth` | `GET` | Management dashboard (requires login). | None | `view_key`: Optional key to view details. | 302 (Redirect if not logged in) |
 | `/ops/approve` | `POST` | Approve a pending request (requires CSRF).| None | None | 302 (Redirect on success/error) |
-| `/ops/reject` | `POST` | Reject/Delete a request (requires CSRF). | None | None | 302 (Redirect on success/error) |
+| `/ops/block` | `POST` | Block a request (requires CSRF). | None | None | 302 (Redirect on success/error) |
+| `/ops/delete` | `POST` | Delete a request (requires CSRF). | None | None | 302 (Redirect on success/error) |
 | `/ops/logout` | `GET` | Log out from the management session. | None | None | 302 (Redirect to `/`) |
 | `/ops/oauth-login` | `GET` | Initiate GitHub OAuth login. | None | None | 302 (Redirect to GitHub) |
 | `/ops/oauth-callback`| `GET` | GitHub OAuth callback handler. | None | `code`, `state` | 302 (Redirect to home/error) |
@@ -146,10 +147,14 @@ These routes provide programmatic access to management functions. All routes req
 
 | Route | Method | Description | Path Elements | Query Params | Error Codes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `/api/list` | `GET` | List all pending request keys. | None | None | 401 (Unauthorized), 500 (Server Error) |
-| `/api/get/{key}` | `GET` | Get details for a specific key. | `{key}`: Base64URL encoded public key. | None | 401 (Unauthorized), 404 (Not Found) |
-| `/api/approve/{key}`| `POST`| Approve a pending request. | `{key}`: Base64URL encoded public key. | None | 401 (Unauthorized), 500 (Server Error) |
-| `/api/reject/{key}` | `POST`| Reject a pending request. | `{key}`: Base64URL encoded public key. | None | 401 (Unauthorized), 500 (Server Error) |
+| `/api/list` | `GET` | List all requests with states. | None | None | 401 (Unauthorized), 500 (Server Error) |
+| `/api/get/{key}` | `GET` | Get details (state, data) for a specific key. | `{key}`: Base64URL encoded public key. | None | 401 (Unauthorized), 404 (Not Found) |
+| `/api/transition` | `POST` | Move a key between states. | None | None | 400 (Invalid state), 401 (Unauthorized), 500 (Error) |
+
+**Notes on API routes**:
+- `/api/list` returns `[{ "state": "...", "pubKey": "..." }, ...]`.
+- `/api/get/{key}` returns `{ "state": "...", "pubKey": "...", "data": { ... } }`.
+- `/api/transition` body: `{ "pubKey": "...", "oldState": "...", "newState": "..." }`. Valid states: `pending`, `authorized`, `blocked`.
 
 ---
 

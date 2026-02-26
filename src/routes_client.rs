@@ -130,7 +130,7 @@ pub async fn authenticate(
             return axum::http::StatusCode::UNAUTHORIZED.into_response();
         }
         match state.storage.authenticate_key(pub_key).await {
-            Ok(Some(token)) => {
+            Ok(crate::storage::AuthResult::Authorized(token)) => {
                 let resp = serde_json::json!({ "authToken": token });
                 (
                     axum::http::StatusCode::OK,
@@ -139,7 +139,10 @@ pub async fn authenticate(
                 )
                     .into_response()
             }
-            Ok(None) => axum::http::StatusCode::UNAUTHORIZED.into_response(),
+            Ok(crate::storage::AuthResult::Pending) => {
+                axum::http::StatusCode::ACCEPTED.into_response()
+            }
+            Ok(_) => axum::http::StatusCode::UNAUTHORIZED.into_response(),
             Err(e) => {
                 tracing::error!("Auth error: {}", e);
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR.into_response()

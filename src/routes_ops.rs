@@ -12,7 +12,8 @@ pub fn router() -> Router<SharedState> {
         .route("/", get(ops_home))
         .route("/ops/auth", get(ops_auth))
         .route("/ops/approve", post(ops_approve))
-        .route("/ops/reject", post(ops_reject))
+        .route("/ops/block", post(ops_block))
+        .route("/ops/delete", post(ops_delete))
         .route("/ops/logout", get(ops_logout))
         .route("/ops/oauth-login", get(ops_oauth_login))
         .route("/ops/oauth-callback", get(ops_oauth_callback))
@@ -44,14 +45,16 @@ pub struct ProtectedTemplate {
     pub username: String,
     pub authorized_keys: Vec<String>,
     pub unauthorized_keys: Vec<String>,
+    pub blocked_keys: Vec<String>,
     pub view_key: Option<String>,
     pub current_value: Option<String>,
     pub csrf_token: String,
 }
 
 #[derive(Deserialize)]
-pub struct ApproveRequest {
+pub struct OpsRequest {
     pub key: String,
+    pub state: Option<String>,
     pub csrf_token: String,
 }
 
@@ -128,13 +131,22 @@ pub async fn ops_auth(
             .await
             .unwrap_or_default();
 
+        let blocked_map = state
+            .storage
+            .get_blocked_requests()
+            .await
+            .unwrap_or_default();
+
         let mut authorized_keys: Vec<String> =
             authorized_map.keys().cloned().collect();
         let mut unauthorized_keys: Vec<String> =
             pending_map.keys().cloned().collect();
+        let mut blocked_keys: Vec<String> =
+            blocked_map.keys().cloned().collect();
 
         authorized_keys.sort();
         unauthorized_keys.sort();
+        blocked_keys.sort();
 
         let view_key = params.get("view_key").cloned();
 
@@ -151,6 +163,11 @@ pub async fn ops_auth(
                     serde_json::to_string_pretty(val)
                         .unwrap_or_else(|_| val.to_string()),
                 );
+            } else if let Some(val) = blocked_map.get(k) {
+                current_value = Some(
+                    serde_json::to_string_pretty(val)
+                        .unwrap_or_else(|_| val.to_string()),
+                );
             }
         }
 
@@ -158,6 +175,7 @@ pub async fn ops_auth(
             username: cookie.value().to_string(),
             authorized_keys,
             unauthorized_keys,
+            blocked_keys,
             view_key,
             current_value,
             csrf_token,
@@ -179,7 +197,7 @@ pub async fn ops_auth(
 pub async fn ops_approve(
     State(state): State<SharedState>,
     cookies: Cookies,
-    Form(form): Form<ApproveRequest>,
+    Form(form): Form<OpsRequest>,
 ) -> impl IntoResponse {
     let key = tower_cookies::Key::from(&state.config.session_secret);
     let signed_cookies = cookies.signed(&key);
@@ -205,18 +223,24 @@ pub async fn ops_approve(
         return Redirect::to("/").into_response();
     }
 
-    if let Err(e) = state.storage.approve_request(&form.key).await {
+    let from_state = form
+        .state
+        .as_deref()
+        .and_then(|s| s.parse::<crate::storage::State>().ok())
+        .unwrap_or(crate::storage::State::Pending);
+
+    if let Err(e) = state.storage.approve_request(&form.key, from_state).await {
         tracing::error!("Failed to approve request: {}", e);
     }
 
     Redirect::to("/ops/auth").into_response()
 }
 
-/// POST /ops/reject - Rejects a specific authentication request via form submission.
-pub async fn ops_reject(
+/// POST /ops/block - Blocks a specific authentication request via form submission.
+pub async fn ops_block(
     State(state): State<SharedState>,
     cookies: Cookies,
-    Form(form): Form<ApproveRequest>,
+    Form(form): Form<OpsRequest>,
 ) -> impl IntoResponse {
     let key = tower_cookies::Key::from(&state.config.session_secret);
     let signed_cookies = cookies.signed(&key);
@@ -242,8 +266,51 @@ pub async fn ops_reject(
         return Redirect::to("/").into_response();
     }
 
-    if let Err(e) = state.storage.delete_request(&form.key).await {
+    let from_state = form
+        .state
+        .as_deref()
+        .and_then(|s| s.parse::<crate::storage::State>().ok())
+        .unwrap_or(crate::storage::State::Pending);
+
+    if let Err(e) = state.storage.block_request(&form.key, from_state).await {
         tracing::error!("Failed to reject request: {}", e);
+    }
+
+    Redirect::to("/ops/auth").into_response()
+}
+
+/// POST /ops/delete - Deletes a specific authentication request via form submission.
+pub async fn ops_delete(
+    State(state): State<SharedState>,
+    cookies: Cookies,
+    Form(form): Form<OpsRequest>,
+) -> impl IntoResponse {
+    let key = tower_cookies::Key::from(&state.config.session_secret);
+    let signed_cookies = cookies.signed(&key);
+
+    if let Some(cookie) = signed_cookies.get("user_session") {
+        let username = cookie.value().to_string();
+        let expected_token = {
+            let csrf_tokens = state.csrf_tokens.lock().unwrap();
+            csrf_tokens.get(&username).map(|e| e.token.clone())
+        };
+
+        if expected_token.is_none()
+            || expected_token.unwrap() != form.csrf_token
+        {
+            tracing::warn!(
+                "CSRF token mismatch on delete for user: {}",
+                username
+            );
+            return Redirect::to("/ops/auth?error=invalid_csrf")
+                .into_response();
+        }
+    } else {
+        return Redirect::to("/").into_response();
+    }
+
+    if let Err(e) = state.storage.delete_request(&form.key).await {
+        tracing::error!("Failed to delete request: {}", e);
     }
 
     Redirect::to("/ops/auth").into_response()

@@ -4,11 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rust OAuth Demo</title>
+    <title>HC Auth Server</title>
 </head>
 
 <body>
-    <h1>Welcome to Rust OAuth Demo</h1>
+    <h1>Welcome to the HC Auth Server</h1>
 
     {% if let Some(err) = error %}
     <div class="error-message">
@@ -18,7 +18,7 @@
 
     {% if logged_in %}
     <p>You are logged in as <strong>{{ username.as_deref().unwrap_or("Unknown") }}</strong>!</p>
-    <p><a href="/ops/auth" class="button">Go to Protected Area</a></p>
+    <p><a href="/ops/auth" class="button">Ops Console</a></p>
     <p><a href="/ops/logout">Logout</a></p>
     {% else %}
     <p>You are not logged in.</p>
