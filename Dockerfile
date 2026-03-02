@@ -18,5 +18,9 @@ EXPOSE 3000
 # Copy the built binary into the runtime container
 COPY --from=builder /usr/local/cargo/bin/hc-auth-server /usr/local/bin/
 
+# Run as a dedicated non-root user
+RUN useradd --system --no-create-home --shell /bin/false hc-auth-server
+USER hc-auth-server
+
 # Run the auth server
 CMD ["hc-auth-server"]
