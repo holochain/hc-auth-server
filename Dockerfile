@@ -13,6 +13,8 @@ RUN cargo install --path . --bin hc-auth-server
 
 FROM debian:trixie-slim
 
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+
 EXPOSE 3000
 
 # Copy the built binary into the runtime container
