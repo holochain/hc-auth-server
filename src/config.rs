@@ -1,5 +1,5 @@
 use dotenvy::dotenv;
-use oauth2::{ClientId, ClientSecret};
+use oauth2::{ClientId, ClientSecret, RedirectUrl};
 use std::collections::HashSet;
 use std::env;
 
@@ -16,6 +16,11 @@ pub struct Config {
     pub github_team: String,
     /// Secret key used for session cookie encryption.
     pub session_secret: Vec<u8>,
+    /// The URI to redirect users to after successful authentication (e.g., admin interface).
+    ///
+    /// If not set, the application will attempt to construct the redirect URI based on the host and port configuration.
+    /// The default is unlikely to work if the server is deployed behind a proxy and is using a different external URL!
+    pub redirect_uri: Option<String>,
     /// Host address to bind the server to.
     pub host: String,
     /// Port number to bind the server to.
@@ -42,6 +47,19 @@ impl Config {
     pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
         dotenv().ok();
 
+        let redirect_uri = match env::var("REDIRECT_URI")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+        {
+            Some(uri) => {
+                RedirectUrl::new(uri.clone())
+                    .map_err(|e| format!("Invalid REDIRECT_URI: {e}"))?;
+                Some(uri)
+            }
+            None => None,
+        };
+
         Ok(Self {
             github_client_id: ClientId::new(env::var("GITHUB_CLIENT_ID")?),
             github_client_secret: ClientSecret::new(env::var(
@@ -50,6 +68,7 @@ impl Config {
             github_org: env::var("GITHUB_ORG")?,
             github_team: env::var("GITHUB_TEAM")?,
             session_secret: env::var("SESSION_SECRET")?.into_bytes(),
+            redirect_uri,
             host: env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
             port: env::var("PORT")
                 .unwrap_or_else(|_| "3000".to_string())
