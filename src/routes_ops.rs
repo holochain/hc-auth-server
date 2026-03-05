@@ -356,15 +356,19 @@ pub async fn ops_oauth_login(
         Some(token_url),
     )
     .set_redirect_uri(
-        RedirectUrl::new(format!(
-            "{}://{}:{}/ops/oauth-callback",
-            if state.config.production {
-                "https"
-            } else {
-                "http"
+        RedirectUrl::new(state.config.redirect_uri.clone().unwrap_or_else(
+            || {
+                format!(
+                    "{}://{}:{}/ops/oauth-callback",
+                    if state.config.production {
+                        "https"
+                    } else {
+                        "http"
+                    },
+                    state.config.host,
+                    state.config.port
+                )
             },
-            state.config.host,
-            state.config.port
         ))
         .expect("Invalid redirect URL"),
     );
@@ -432,15 +436,19 @@ pub async fn ops_oauth_callback(
         Some(token_url),
     )
     .set_redirect_uri(
-        RedirectUrl::new(format!(
-            "{}://{}:{}/ops/oauth-callback",
-            if state.config.production {
-                "https"
-            } else {
-                "http"
+        RedirectUrl::new(state.config.redirect_uri.clone().unwrap_or_else(
+            || {
+                format!(
+                    "{}://{}:{}/ops/oauth-callback",
+                    if state.config.production {
+                        "https"
+                    } else {
+                        "http"
+                    },
+                    state.config.host,
+                    state.config.port
+                )
             },
-            state.config.host,
-            state.config.port
         ))
         .expect("Invalid redirect URL"),
     );

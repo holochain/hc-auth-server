@@ -93,8 +93,14 @@ All configuration is handled via environment variables.
 | `GITHUB_ORG` | GitHub Organization name for access control | - | Yes |
 | `GITHUB_TEAM` | GitHub Team slug within the org | - | Yes |
 | `SESSION_SECRET` | Secret key for signing session cookies (min 64 chars recommended) | - | Yes |
+| `REDIRECT_URI` | OAuth callback URI sent during token exchange | `{scheme}://{HOST}:{PORT}/ops/oauth-callback` | No |
 | `HOST` | Interface to bind to | `127.0.0.1` | No |
 | `PORT` | Port to listen on | `3000` | No |
+| `PRODUCTION` | Enables HTTPS scheme and secure cookies | `false` | No |
+| `REDIS_URL` | Redis connection URL (standalone). If unset, in-memory storage is used | - | No |
+| `MAX_PENDING_REQUESTS` | Maximum number of pending OAuth flows held in storage | `10` | No |
+| `API_TOKENS` | Comma-separated list of tokens authorized to call protected API endpoints | - | No |
+| `DRIFT_SECS` | Allowed clock skew in seconds for time-based validation | `300` | No |
 | `RUST_LOG` | Tracing log level filter | `hc_auth_server=debug,tower_http=debug` | No |
 
 Helper for generating session secret:
