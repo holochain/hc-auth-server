@@ -137,16 +137,41 @@ pub async fn ops_auth(
             .await
             .unwrap_or_default();
 
-        let mut authorized_keys: Vec<String> =
-            authorized_map.keys().cloned().collect();
-        let mut unauthorized_keys: Vec<String> =
-            pending_map.keys().cloned().collect();
-        let mut blocked_keys: Vec<String> =
-            blocked_map.keys().cloned().collect();
+        let mut authorized_pairs: Vec<_> = authorized_map.iter().collect();
+        authorized_pairs.sort_by(|(_, v1), (_, v2)| {
+            let t1 =
+                v1.get("createdAt").and_then(|t| t.as_f64()).unwrap_or(0.0);
+            let t2 =
+                v2.get("createdAt").and_then(|t| t.as_f64()).unwrap_or(0.0);
+            t1.partial_cmp(&t2).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let authorized_keys: Vec<String> = authorized_pairs
+            .into_iter()
+            .map(|(k, _)| k)
+            .cloned()
+            .collect();
 
-        authorized_keys.sort();
-        unauthorized_keys.sort();
-        blocked_keys.sort();
+        let mut pending_pairs: Vec<_> = pending_map.iter().collect();
+        pending_pairs.sort_by(|(_, v1), (_, v2)| {
+            let t1 =
+                v1.get("createdAt").and_then(|t| t.as_f64()).unwrap_or(0.0);
+            let t2 =
+                v2.get("createdAt").and_then(|t| t.as_f64()).unwrap_or(0.0);
+            t1.partial_cmp(&t2).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let unauthorized_keys: Vec<String> =
+            pending_pairs.into_iter().map(|(k, _)| k).cloned().collect();
+
+        let mut blocked_pairs: Vec<_> = blocked_map.iter().collect();
+        blocked_pairs.sort_by(|(_, v1), (_, v2)| {
+            let t1 =
+                v1.get("createdAt").and_then(|t| t.as_f64()).unwrap_or(0.0);
+            let t2 =
+                v2.get("createdAt").and_then(|t| t.as_f64()).unwrap_or(0.0);
+            t1.partial_cmp(&t2).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let blocked_keys: Vec<String> =
+            blocked_pairs.into_iter().map(|(k, _)| k).cloned().collect();
 
         let view_key = params.get("view_key").cloned();
 
