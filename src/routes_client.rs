@@ -84,32 +84,32 @@ pub async fn request_auth(
 
 /// PUT /authenticate - Validates a signed authentication request and returns a token.
 ///
-/// Requires `Content-Type: application/octet-stream`. The body should be a JSON string.
+/// Requires `Content-Type: application/octet-stream` if set; absent is also accepted.
+/// The body should be a JSON string with `pubKey`, `payload`, and `signature` fields.
 /// If successful and approved, returns an `authToken`.
 pub async fn authenticate(
     State(state): State<SharedState>,
     headers: HeaderMap,
     body: Bytes,
 ) -> impl IntoResponse {
-    // Check Content-Type
+    // Reject only if Content-Type is explicitly set to something other than octet-stream.
+    // Absent Content-Type is allowed — some clients (e.g. ureq 3.x with &[u8]) don't set it.
     if let Some(ct) = headers.get("content-type") {
         if ct != "application/octet-stream" {
-            return axum::http::StatusCode::UNAUTHORIZED.into_response();
+            return axum::http::StatusCode::BAD_REQUEST.into_response();
         }
-    } else {
-        return axum::http::StatusCode::UNAUTHORIZED.into_response();
     }
 
     // Parse bytes as UTF-8
     let body_str = match String::from_utf8(body.to_vec()) {
         Ok(s) => s,
-        Err(_) => return axum::http::StatusCode::UNAUTHORIZED.into_response(),
+        Err(_) => return axum::http::StatusCode::BAD_REQUEST.into_response(),
     };
 
     // Parse as JSON
     let json_val: serde_json::Value = match serde_json::from_str(&body_str) {
         Ok(j) => j,
-        Err(_) => return axum::http::StatusCode::UNAUTHORIZED.into_response(),
+        Err(_) => return axum::http::StatusCode::BAD_REQUEST.into_response(),
     };
 
     let signature = json_val.get("signature").and_then(|v| v.as_str());
