@@ -164,9 +164,24 @@ fn validate_pubkey(pk: &str) -> Result<(), ()> {
 
 /// Verifies an Ed25519 signature over a payload.
 ///
-/// Ensures the payload timestamp is within the allowed `drift_secs`.
+/// We intentionally do NOT validate the timestamp embedded in the payload, for two reasons:
+///
+/// 1. Holochain stores `base64_auth_material` statically in its conductor config and replays
+///    it verbatim on every startup. It has no mechanism to construct fresh payloads
+///    dynamically, so a timestamp check would cause auth to fail on every restart after
+///    the initial registration window expired.
+///
+/// 2. The `/now` payload includes a random nonce (bytes 8–31), but the server never stores
+///    seen nonces, so replay within the drift window was already permitted. The timestamp
+///    check was therefore not providing meaningful replay protection.
+///
+/// Security is instead enforced by:
+///   - Ed25519 signature verification (proves the caller held the private key at registration)
+///   - Admin-controlled approved key list (admin approval to join, admin revocation to remove)
+///
+/// If a node is suspected of abuse, an admin can revoke its key via the ops interface.
 fn validate_signature(
-    drift_secs: f64,
+    _drift_secs: f64,
     base64_url_encoded_pubkey: &str,
     base64_url_encoded_signature: &str,
     base64_url_encoded_payload: &str,
@@ -185,20 +200,6 @@ fn validate_signature(
         .map_err(|_| ())?;
 
     if payload_bytes.len() != 32 {
-        return Err(());
-    }
-
-    // Extract timestamp
-    let ts_bytes: [u8; 8] = payload_bytes[..8].try_into().map_err(|_| ())?;
-    let timestamp = f64::from_le_bytes(ts_bytes);
-
-    let now = now();
-
-    if timestamp > now + drift_secs {
-        return Err(());
-    }
-
-    if timestamp < now - drift_secs {
         return Err(());
     }
 
