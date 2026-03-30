@@ -2,6 +2,9 @@ use dotenvy::dotenv;
 use oauth2::{ClientId, ClientSecret, RedirectUrl};
 use std::collections::HashSet;
 use std::env;
+use std::path::PathBuf;
+
+use crate::tls::TlsConfig;
 
 /// Configuration for the authentication server.
 #[derive(Clone)]
@@ -37,6 +40,9 @@ pub struct Config {
 
     /// Whether the server is running in production mode (enables HTTPS/Secure cookies).
     pub production: bool,
+
+    /// Optional TLS configuration for serving over HTTPS.
+    pub tls_config: Option<TlsConfig>,
 }
 
 impl Config {
@@ -89,6 +95,19 @@ impl Config {
             production: match env::var("PRODUCTION") {
                 Ok(v) => v.parse()?,
                 Err(_) => false,
+            },
+            tls_config: match (
+                env::var("TLS_CERT").ok().map(PathBuf::from),
+                env::var("TLS_KEY").ok().map(PathBuf::from),
+            ) {
+                (Some(cert), Some(key)) => Some(TlsConfig::new(cert, key)),
+                (None, None) => None,
+                _ => {
+                    return Err(
+                        "Both TLS_CERT and TLS_KEY must be set, or neither"
+                            .into(),
+                    );
+                }
             },
         })
     }

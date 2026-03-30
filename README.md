@@ -97,11 +97,15 @@ All configuration is handled via environment variables.
 | `HOST` | Interface to bind to | `127.0.0.1` | No |
 | `PORT` | Port to listen on | `3000` | No |
 | `PRODUCTION` | Enables HTTPS scheme and secure cookies | `false` | No |
+| `TLS_CERT` | Path to PEM-encoded TLS certificate file | - | No* |
+| `TLS_KEY` | Path to PEM-encoded TLS private key file | - | No* |
 | `REDIS_URL` | Redis connection URL (standalone). If unset, in-memory storage is used | - | No |
 | `MAX_PENDING_REQUESTS` | Maximum number of pending OAuth flows held in storage | `10` | No |
 | `API_TOKENS` | Comma-separated list of tokens authorized to call protected API endpoints | - | No |
 | `DRIFT_SECS` | Allowed clock skew in seconds for time-based validation | `300` | No |
 | `RUST_LOG` | Tracing log level filter | `hc_auth_server=debug,tower_http=debug` | No |
+
+\* `TLS_CERT` and `TLS_KEY` must both be set together, or neither. When set, the server serves over HTTPS with automatic hourly certificate reload.
 
 Helper for generating session secret:
 
