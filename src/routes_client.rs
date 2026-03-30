@@ -94,10 +94,11 @@ pub async fn authenticate(
 ) -> impl IntoResponse {
     // Reject only if Content-Type is explicitly set to something other than octet-stream.
     // Absent Content-Type is allowed — some clients (e.g. ureq 3.x with &[u8]) don't set it.
-    if let Some(ct) = headers.get("content-type") {
-        if ct != "application/octet-stream" {
-            return axum::http::StatusCode::BAD_REQUEST.into_response();
-        }
+
+    if let Some(ct) = headers.get("content-type")
+        && ct != "application/octet-stream"
+    {
+        return axum::http::StatusCode::BAD_REQUEST.into_response();
     }
 
     // Parse bytes as UTF-8
