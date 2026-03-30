@@ -32,6 +32,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let host = config.host.clone();
     let tls_config = config.tls_config.take();
 
+    // If TLS is enabled, ensure production mode is set so handlers use
+    // secure cookies and the https scheme.
+    if tls_config.is_some() && !config.production {
+        tracing::warn!(
+            "TLS is enabled but PRODUCTION is not set to true, forcing production mode. Please set PRODUCTION=true in your configuration."
+        );
+        config.production = true;
+    }
+
     // Initialize Storage
     let storage = Storage::new(&config)
         .await
