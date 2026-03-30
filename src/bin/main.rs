@@ -1,4 +1,6 @@
 use axum::Router;
+use axum_server::tls_rustls::RustlsAcceptor;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
@@ -25,10 +27,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     // Load configuration
-    let config = Config::from_env().expect("Failed to load configuration");
+    let mut config = Config::from_env().expect("Failed to load configuration");
     let port = config.port;
     let host = config.host.clone();
-    let production = config.production;
+    let tls_config = config.tls_config.take();
 
     // Initialize Storage
     let storage = Storage::new(&config)
@@ -88,10 +90,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let addr = format!("{}:{}", host, port);
     let listener = TcpListener::bind(&addr).await?;
-    let protocol = if production { "https" } else { "http" };
+    let protocol = if tls_config.is_some() {
+        "https"
+    } else {
+        "http"
+    };
     tracing::info!("listening on {}://{}", protocol, addr);
 
-    axum::serve(listener, app).await?;
+    if let Some(tls_config) = tls_config {
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .expect("Failed to configure default TLS provider");
+
+        let rustls_config = tls_config
+            .create_tls_config()
+            .await
+            .expect("Failed to create TLS config");
+
+        tokio::spawn(tls_config.reload_task(rustls_config.clone()));
+
+        let acceptor = RustlsAcceptor::new(rustls_config);
+        axum_server::Server::from_tcp(listener.into_std()?)
+            .acceptor(acceptor)
+            .serve(app.into_make_service_with_connect_info::<SocketAddr>())
+            .await?;
+    } else {
+        axum::serve(listener, app).await?;
+    }
 
     Ok(())
 }
