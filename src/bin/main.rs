@@ -26,6 +26,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    // Install the default rustls crypto provider. This must happen before any
+    // TLS connections are established (including Redis/Valkey with `rediss://`).
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to configure default TLS provider");
+
     // Load configuration
     let mut config = Config::from_env().expect("Failed to load configuration");
     let port = config.port;
@@ -107,10 +113,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("listening on {}://{}", protocol, addr);
 
     if let Some(tls_config) = tls_config {
-        rustls::crypto::ring::default_provider()
-            .install_default()
-            .expect("Failed to configure default TLS provider");
-
         let rustls_config = tls_config
             .create_tls_config()
             .await
