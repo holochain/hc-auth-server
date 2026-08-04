@@ -121,7 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::spawn(tls_config.reload_task(rustls_config.clone()));
 
         let acceptor = RustlsAcceptor::new(rustls_config);
-        axum_server::Server::from_tcp(listener.into_std()?)
+        axum_server::Server::<SocketAddr>::from_listener(listener)
             .acceptor(acceptor)
             .serve(app.into_make_service_with_connect_info::<SocketAddr>())
             .await?;
