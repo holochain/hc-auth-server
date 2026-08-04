@@ -1,6 +1,6 @@
 use crate::config::Config;
 use base64::prelude::*;
-use rand::RngCore;
+use rand::Rng;
 use redis::aio::ConnectionManager;
 use serde_json::Value;
 use std::collections::HashMap;
