@@ -13,7 +13,7 @@ path = "src/bin/main.rs"
 
 
 [dependencies]
-askama = "0.15.4"
+askama = "0.16.0"
 axum = "0.8.8"
 dotenvy = "0.15.7"
 oauth2 = "4.4.2"
