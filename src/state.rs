@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::oauth_http::OAuthHttpClient;
 use crate::storage::Storage;
 use oauth2::{CsrfToken, PkceCodeVerifier};
 use std::collections::HashMap;
@@ -32,6 +33,11 @@ pub struct AppState {
     pub storage: Arc<Storage>,
     /// Shared HTTP client.
     pub http_client: reqwest::Client,
+    /// HTTP client used for OAuth token exchange.
+    ///
+    /// Kept separate from the client above because it must not follow
+    /// redirects; see [`OAuthHttpClient`].
+    pub oauth_http_client: OAuthHttpClient,
     /// In-memory map of pending OAuth requests.
     pub pending_auth: Arc<Mutex<HashMap<String, PendingAuth>>>,
     /// In-memory map of active CSRF tokens for the web UI.
