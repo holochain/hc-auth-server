@@ -7,7 +7,8 @@ use tower_cookies::CookieManagerLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use hc_auth_server::{
-    AppState, Config, Storage, routes_api, routes_client, routes_ops,
+    AppState, Config, Storage, oauth_http::OAuthHttpClient, routes_api,
+    routes_client, routes_ops,
 };
 
 /// Main entry point for the authentication server.
@@ -54,10 +55,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let http_client = reqwest::Client::new();
 
+    let oauth_http_client =
+        OAuthHttpClient::new().expect("Failed to build the OAuth HTTP client");
+
     let state = AppState {
         config: Arc::new(config),
         storage: Arc::new(storage),
         http_client,
+        oauth_http_client,
         pending_auth: Arc::new(std::sync::Mutex::new(
             std::collections::HashMap::new(),
         )),

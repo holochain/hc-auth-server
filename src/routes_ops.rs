@@ -19,8 +19,9 @@ pub fn router() -> Router<SharedState> {
         .route("/ops/oauth-callback", get(ops_oauth_callback))
 }
 use oauth2::{
-    AuthUrl, AuthorizationCode, CsrfToken, PkceCodeChallenge, RedirectUrl,
-    Scope, TokenResponse, TokenUrl, basic::BasicClient,
+    AuthUrl, AuthorizationCode, CsrfToken, EndpointNotSet, EndpointSet,
+    PkceCodeChallenge, RedirectUrl, Scope, TokenResponse, TokenUrl,
+    basic::BasicClient,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -359,13 +360,18 @@ pub async fn ops_logout(
     Redirect::to("/")
 }
 
-/// GET /ops/oauth-login - Initiates the GitHub OAuth flow.
-pub async fn ops_oauth_login(
-    cookies: Cookies,
-    State(state): State<SharedState>,
-) -> impl IntoResponse {
-    let client_id = state.config.github_client_id.clone();
-    let client_secret = state.config.github_client_secret.clone();
+/// A [`BasicClient`] with the authorization and token endpoints configured,
+/// which is what `authorize_url` and `exchange_code` require.
+type GitHubOAuthClient = BasicClient<
+    EndpointSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointSet,
+>;
+
+/// Builds the GitHub OAuth client from the server configuration.
+fn github_oauth_client(state: &SharedState) -> GitHubOAuthClient {
     let auth_url =
         AuthUrl::new("https://github.com/login/oauth/authorize".to_string())
             .expect("Invalid authorization endpoint URL");
@@ -373,30 +379,35 @@ pub async fn ops_oauth_login(
         "https://github.com/login/oauth/access_token".to_string(),
     )
     .expect("Invalid token endpoint URL");
-
-    let client = BasicClient::new(
-        client_id,
-        Some(client_secret),
-        auth_url,
-        Some(token_url),
+    let redirect_url = RedirectUrl::new(
+        state.config.redirect_uri.clone().unwrap_or_else(|| {
+            format!(
+                "{}://{}:{}/ops/oauth-callback",
+                if state.config.production {
+                    "https"
+                } else {
+                    "http"
+                },
+                state.config.host,
+                state.config.port
+            )
+        }),
     )
-    .set_redirect_uri(
-        RedirectUrl::new(state.config.redirect_uri.clone().unwrap_or_else(
-            || {
-                format!(
-                    "{}://{}:{}/ops/oauth-callback",
-                    if state.config.production {
-                        "https"
-                    } else {
-                        "http"
-                    },
-                    state.config.host,
-                    state.config.port
-                )
-            },
-        ))
-        .expect("Invalid redirect URL"),
-    );
+    .expect("Invalid redirect URL");
+
+    BasicClient::new(state.config.github_client_id.clone())
+        .set_client_secret(state.config.github_client_secret.clone())
+        .set_auth_uri(auth_url)
+        .set_token_uri(token_url)
+        .set_redirect_uri(redirect_url)
+}
+
+/// GET /ops/oauth-login - Initiates the GitHub OAuth flow.
+pub async fn ops_oauth_login(
+    cookies: Cookies,
+    State(state): State<SharedState>,
+) -> impl IntoResponse {
+    let client = github_oauth_client(&state);
 
     // Proper PKCE setup: generate both the challenge and verifier at once
     let (pkce_challenge, pkce_verifier) =
@@ -444,39 +455,7 @@ pub async fn ops_oauth_callback(
     cookies: Cookies,
     Query(query): Query<AuthRequest>,
 ) -> impl IntoResponse {
-    let client_id = state.config.github_client_id.clone();
-    let client_secret = state.config.github_client_secret.clone();
-    let auth_url =
-        AuthUrl::new("https://github.com/login/oauth/authorize".to_string())
-            .expect("Invalid authorization endpoint URL");
-    let token_url = TokenUrl::new(
-        "https://github.com/login/oauth/access_token".to_string(),
-    )
-    .expect("Invalid token endpoint URL");
-
-    let client = BasicClient::new(
-        client_id,
-        Some(client_secret),
-        auth_url,
-        Some(token_url),
-    )
-    .set_redirect_uri(
-        RedirectUrl::new(state.config.redirect_uri.clone().unwrap_or_else(
-            || {
-                format!(
-                    "{}://{}:{}/ops/oauth-callback",
-                    if state.config.production {
-                        "https"
-                    } else {
-                        "http"
-                    },
-                    state.config.host,
-                    state.config.port
-                )
-            },
-        ))
-        .expect("Invalid redirect URL"),
-    );
+    let client = github_oauth_client(&state);
 
     // Verify CSRF state and PKCE verifier
     let key = tower_cookies::Key::from(&state.config.session_secret);
@@ -511,7 +490,7 @@ pub async fn ops_oauth_callback(
     let token_result = client
         .exchange_code(AuthorizationCode::new(query.code.clone()))
         .set_pkce_verifier(pending_auth.pkce_verifier)
-        .request_async(oauth2::reqwest::async_http_client)
+        .request_async(&state.oauth_http_client)
         .await;
 
     match token_result {
