@@ -235,7 +235,7 @@ impl Storage {
                 lua::get_all_by_state(&mut con, state).await?;
 
             let mut result = HashMap::new();
-            for chunk in res.chunks_exact(2) {
+            for chunk in res.as_chunks::<2>().0 {
                 let key = chunk[0].clone();
                 let json = &chunk[1];
                 result.insert(key, parse_value(json));
