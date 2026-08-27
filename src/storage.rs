@@ -16,6 +16,16 @@ fn parse_value(json: &str) -> Value {
     serde_json::from_str(json).unwrap_or(Value::String(json.to_string()))
 }
 
+/// Whether a failed operation can safely be run again on a new connection.
+///
+/// Restricted to errors that mean the socket was already dead, so the command
+/// cannot have reached Redis. Broader classifications, `is_unrecoverable_error`
+/// among them, also cover parse and authentication failures, where the command
+/// may well have executed.
+fn is_retryable(err: &StorageErr) -> bool {
+    matches!(err, StorageErr::Redis(e) if e.is_connection_dropped())
+}
+
 /// Formats the Redis key for an authentication record.
 pub(crate) fn auth_key(id: &str) -> String {
     format!("auth:{id}")
@@ -126,7 +136,14 @@ impl Storage {
         .map_err(Into::into)
     }
 
-    /// Helper to execute an async closure with a cloned connection manager.
+    /// Helper to execute an async closure with a cloned connection manager,
+    /// retrying once if the connection turned out to be dead.
+    ///
+    /// Redis closes idle connections. `ConnectionManager` reconnects in the
+    /// background but still fails the command that found the dead socket, so
+    /// without this the first request after a quiet period always fails. The
+    /// replacement is swapped in before that error surfaces here, so the
+    /// retry needs no backoff.
     async fn with_connection<F, Fut, T>(
         &self,
         mut f: F,
@@ -135,7 +152,15 @@ impl Storage {
         F: FnMut(ConnectionManager) -> Fut,
         Fut: std::future::Future<Output = Result<T, StorageErr>>,
     {
-        f(self.connection_manager.clone()).await
+        match f(self.connection_manager.clone()).await {
+            Err(e) if is_retryable(&e) => {
+                tracing::warn!(
+                    "Redis connection lost ({e}), retrying on a fresh connection"
+                );
+                f(self.connection_manager.clone()).await
+            }
+            other => other,
+        }
     }
 
     /// Adds a new authentication request to the pending set.
@@ -159,8 +184,11 @@ impl Storage {
                 )
                 .await
                 .map_err(|e| {
-                    if e.to_string().contains("limit_reached") {
+                    let msg = e.to_string();
+                    if msg.contains("limit_reached") {
                         StorageErr::TooManyPendingRequests
+                    } else if msg.contains("already_exists") {
+                        StorageErr::AlreadyRegistered
                     } else {
                         e.into()
                     }
@@ -305,5 +333,50 @@ impl Storage {
         })
         .await
         .map_err(Into::into)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use redis::{ErrorKind, RedisError};
+    use std::io;
+
+    fn io_err(kind: io::ErrorKind) -> StorageErr {
+        StorageErr::Redis(io::Error::new(kind, "test").into())
+    }
+
+    fn kind_err(kind: ErrorKind) -> StorageErr {
+        StorageErr::Redis(RedisError::from((kind, "test")))
+    }
+
+    #[test]
+    fn broken_pipe_is_retryable() {
+        assert!(is_retryable(&io_err(io::ErrorKind::BrokenPipe)));
+    }
+
+    #[test]
+    fn connection_reset_is_retryable() {
+        assert!(is_retryable(&io_err(io::ErrorKind::ConnectionReset)));
+    }
+
+    #[test]
+    fn timeout_is_not_retryable() {
+        assert!(!is_retryable(&io_err(io::ErrorKind::TimedOut)));
+    }
+
+    #[test]
+    fn parse_failure_is_not_retryable() {
+        assert!(!is_retryable(&kind_err(ErrorKind::Parse)));
+    }
+
+    #[test]
+    fn authentication_failure_is_not_retryable() {
+        assert!(!is_retryable(&kind_err(ErrorKind::AuthenticationFailed)));
+    }
+
+    #[test]
+    fn non_redis_errors_are_not_retryable() {
+        assert!(!is_retryable(&StorageErr::TooManyPendingRequests));
     }
 }

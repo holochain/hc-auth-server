@@ -68,6 +68,10 @@ pub async fn request_auth(
             )
                 .into_response();
         }
+        // The record already exists, so the state the caller asked for already
+        // holds. Returning OK keeps the endpoint idempotent, which matters
+        // because a write whose response was lost is retried and lands here.
+        Err(StorageErr::AlreadyRegistered) => (),
         Err(err) => {
             tracing::error!("Failed to set auth data: {}", err);
             return (
