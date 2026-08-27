@@ -11,6 +11,10 @@ pub enum StorageErr {
     #[error("Too many pending requests")]
     TooManyPendingRequests,
 
+    /// A record already exists for this key, in any state.
+    #[error("A request already exists for this key")]
+    AlreadyRegistered,
+
     /// Redis error.
     #[error("Redis error: {0}")]
     Redis(#[from] redis::RedisError),
