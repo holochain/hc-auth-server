@@ -99,7 +99,7 @@ All configuration is handled via environment variables.
 | `PRODUCTION` | Enables HTTPS scheme and secure cookies | `false` | No |
 | `TLS_CERT` | Path to PEM-encoded TLS certificate file | - | No* |
 | `TLS_KEY` | Path to PEM-encoded TLS private key file | - | No* |
-| `REDIS_URL` | Redis connection URL (standalone). If unset, in-memory storage is used | - | No |
+| `REDIS_URL` | Redis connection URL (standalone). The server exits at startup if this is not set | - | Yes |
 | `MAX_PENDING_REQUESTS` | Maximum number of pending OAuth flows held in storage | `10` | No |
 | `API_TOKENS` | Comma-separated list of tokens authorized to call protected API endpoints | - | No |
 | `DRIFT_SECS` | Allowed clock skew in seconds for time-based validation | `300` | No |
