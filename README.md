@@ -137,6 +137,7 @@ These routes are used by clients wishing to authenticate.
 - Requires `Content-Type: application/octet-stream`.
 - Body must be a UTF-8 JSON string containing `pubKey`, `signature`, and `payload` (all Base64URL encoded).
 - `payload` must be exactly what was returned by `/now`.
+- `signature` must be over the bytes `hc-auth-challenge-v1:` followed by the decoded `payload`. The prefix makes the signature valid for this purpose only.
 
 #### Operations (Ops) Routes
 These routes are used by administrators via the web interface.
