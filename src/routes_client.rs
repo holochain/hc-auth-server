@@ -20,9 +20,19 @@ pub fn router() -> Router<SharedState> {
 use base64::prelude::*;
 use ed25519_dalek::{Signature, VerifyingKey};
 
+/// Prefix a client puts before the `/now` payload, so the signature is valid for this purpose only.
+pub const CHALLENGE_SIGNING_PREFIX: &[u8] = b"hc-auth-challenge-v1:";
+
+/// The bytes a client signs for a `/now` payload: [`CHALLENGE_SIGNING_PREFIX`]
+/// followed by the decoded payload.
+pub fn challenge_signing_bytes(payload: &[u8]) -> Vec<u8> {
+    [CHALLENGE_SIGNING_PREFIX, payload].concat()
+}
+
 /// GET /now - Returns the current server time and a random nonce, base64url encoded.
 ///
-/// Used by clients to construct a signed payload for authentication.
+/// Used by clients to construct a signed payload for authentication. The client
+/// signs [`challenge_signing_bytes`] of the decoded payload.
 pub async fn now_handler() -> impl IntoResponse {
     use rand::prelude::*;
 
@@ -167,7 +177,10 @@ fn validate_pubkey(pk: &str) -> Result<(), ()> {
     Ok(())
 }
 
-/// Verifies an Ed25519 signature over a payload.
+/// Verifies an Ed25519 signature over [`challenge_signing_bytes`] of a payload.
+///
+/// A signature over the bare payload is refused, so that a client never has a
+/// reason to sign bytes that carry no domain separation.
 ///
 /// We intentionally do NOT validate the timestamp embedded in the payload, for two reasons:
 ///
@@ -218,8 +231,76 @@ fn validate_signature(
 
     // Verify
     verifying_key
-        .verify_strict(&payload_bytes, &signature)
+        .verify_strict(&challenge_signing_bytes(&payload_bytes), &signature)
         .map_err(|_| ())?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
+
+    fn b64(bytes: &[u8]) -> String {
+        BASE64_URL_SAFE_NO_PAD.encode(bytes)
+    }
+
+    fn validate(
+        key: &SigningKey,
+        signed: &[u8],
+        payload: &[u8],
+    ) -> Result<(), ()> {
+        validate_signature(
+            0.0,
+            &b64(key.verifying_key().as_bytes()),
+            &b64(&key.sign(signed).to_bytes()),
+            &b64(payload),
+        )
+    }
+
+    #[test]
+    fn accepts_a_signature_over_the_prefixed_payload() {
+        let key = SigningKey::from_bytes(&[7; 32]);
+        let payload = [1u8; 32];
+
+        assert!(
+            validate(&key, &challenge_signing_bytes(&payload), &payload)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn refuses_a_signature_over_the_bare_payload() {
+        let key = SigningKey::from_bytes(&[7; 32]);
+        let payload = [1u8; 32];
+
+        assert!(validate(&key, &payload, &payload).is_err());
+    }
+
+    #[test]
+    fn refuses_a_payload_that_is_not_32_bytes() {
+        let key = SigningKey::from_bytes(&[7; 32]);
+        let payload = [1u8; 33];
+
+        assert!(
+            validate(&key, &challenge_signing_bytes(&payload), &payload)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn refuses_a_signature_from_another_key() {
+        let key = SigningKey::from_bytes(&[7; 32]);
+        let other = SigningKey::from_bytes(&[8; 32]);
+        let payload = [1u8; 32];
+
+        let result = validate_signature(
+            0.0,
+            &b64(key.verifying_key().as_bytes()),
+            &b64(&other.sign(&challenge_signing_bytes(&payload)).to_bytes()),
+            &b64(&payload),
+        );
+        assert!(result.is_err());
+    }
 }

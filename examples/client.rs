@@ -1,5 +1,6 @@
 use base64::prelude::*;
 use ed25519_dalek::SigningKey;
+use hc_auth_server::routes_client::challenge_signing_bytes;
 use rand::prelude::*;
 use serde_json::json;
 use std::env;
@@ -205,9 +206,9 @@ async fn perform_auth(
     let payload_b64 = now_resp.text().await?;
     let payload_bytes = BASE64_URL_SAFE_NO_PAD.decode(&payload_b64)?;
 
-    // Sign the payload
+    // Sign the prefixed payload
     use ed25519_dalek::Signer;
-    let signature = signing_key.sign(&payload_bytes);
+    let signature = signing_key.sign(&challenge_signing_bytes(&payload_bytes));
     let signature_b64 = BASE64_URL_SAFE_NO_PAD.encode(signature.to_bytes());
 
     let auth_body = json!({
