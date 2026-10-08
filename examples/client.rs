@@ -1,6 +1,6 @@
 use base64::prelude::*;
 use ed25519_dalek::SigningKey;
-use hc_auth_server::routes_client::challenge_signing_bytes;
+use hc_auth_types::{CHALLENGE_LEN, challenge_signing_bytes};
 use rand::prelude::*;
 use serde_json::json;
 use std::env;
@@ -204,7 +204,10 @@ async fn perform_auth(
     let now_url = format!("{}/now", base_url);
     let now_resp = client.get(&now_url).send().await?.error_for_status()?;
     let payload_b64 = now_resp.text().await?;
-    let payload_bytes = BASE64_URL_SAFE_NO_PAD.decode(&payload_b64)?;
+    let payload_bytes: [u8; CHALLENGE_LEN] = BASE64_URL_SAFE_NO_PAD
+        .decode(&payload_b64)?
+        .try_into()
+        .map_err(|_| "challenge has the wrong length")?;
 
     // Sign the prefixed payload
     use ed25519_dalek::Signer;
