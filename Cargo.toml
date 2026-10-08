@@ -1,7 +1,14 @@
-[package]
-name = "hc-auth-server"
+[workspace]
+members = [".", "crates/hc-auth-types"]
+
+[workspace.package]
 version = "0.1.7"
 edition = "2024"
+
+[package]
+name = "hc-auth-server"
+version.workspace = true
+edition.workspace = true
 default-run = "hc-auth-server"
 
 [lib]
@@ -13,6 +20,7 @@ path = "src/bin/main.rs"
 
 
 [dependencies]
+hc-auth-types = { version = "0.1.7", path = "crates/hc-auth-types" }
 askama = "0.16.0"
 axum = "0.8.8"
 dotenvy = "0.15.7"

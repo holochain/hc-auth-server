@@ -6,6 +6,7 @@ WORKDIR /usr/src/hc-auth-server
 # Copy the package's source code into the container
 COPY ["Cargo.toml", "Cargo.lock", "./"]
 COPY src ./src
+COPY crates ./crates
 COPY templates ./templates
 
 # Build the auth server
