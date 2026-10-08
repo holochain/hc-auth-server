@@ -812,6 +812,7 @@ dependencies = [
  "dotenvy",
  "ed25519-dalek",
  "futures",
+ "hc-auth-types",
  "oauth2",
  "rand 0.10.3",
  "redis",
@@ -825,6 +826,10 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
 ]
+
+[[package]]
+name = "hc-auth-types"
+version = "0.1.7"
 
 [[package]]
 name = "hmac"
