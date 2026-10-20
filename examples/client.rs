@@ -12,15 +12,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// 2. Requests authentication from the server.
 /// 3. Uses an API token to list and approve the request (for demonstration).
 /// 4. Signs a challenge from the server to obtain an authentication token.
+/// 5. Writes a verified email with the admin API and checks it with a
+///    confirm token, once with the right address and once with a wrong one.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 0. Parse API token from command-line arguments
     let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Usage: {} <api-token>", args[0]);
+    if args.len() < 3 {
+        eprintln!("Usage: {} <api-token> <confirm-token>", args[0]);
         std::process::exit(1);
     }
     let api_token = &args[1];
+    let confirm_token = &args[2];
 
     // 1. Generate a new ed25519 keypair
     let mut seed = [0; 32];
@@ -188,6 +191,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  Authentication FAILED: {}", resp.status());
         let text = resp.text().await?;
         println!("  Response: {}", text);
+    }
+
+    // 6. Verified email and confirm-email
+    println!("\nStep 4: Writing the verified email (admin API)...");
+    let verified_resp = client
+        .put(format!("{}/api/verified/{}", base_url, pubkey_b64))
+        .header("Authorization", &auth_header)
+        .json(&json!({ "email": "ada@example.com" }))
+        .send()
+        .await?;
+    if !verified_resp.status().is_success() {
+        eprintln!("Failed to set verified: {}", verified_resp.status());
+        return Ok(());
+    }
+    println!("  Success: verified.email written.");
+
+    println!("\nStep 5: Confirming the email (confirm token)...");
+    let confirm_header = format!("Bearer {}", confirm_token);
+    for email in ["Ada@Example.com", "someone-else@example.com"] {
+        let confirm_resp = client
+            .post(format!("{}/api/confirm-email", base_url))
+            .header("Authorization", &confirm_header)
+            .json(&json!({ "pubKey": pubkey_b64, "email": email }))
+            .send()
+            .await?;
+        if !confirm_resp.status().is_success() {
+            eprintln!("Failed to confirm: {}", confirm_resp.status());
+            return Ok(());
+        }
+        let answer: bool = confirm_resp.json().await?;
+        println!("  {email}: {answer}");
     }
 
     Ok(())
