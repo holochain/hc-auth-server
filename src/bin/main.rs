@@ -8,7 +8,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use hc_auth_server::{
     AppState, Config, Storage, oauth_http::OAuthHttpClient, routes_api,
-    routes_client, routes_ops,
+    routes_client, routes_confirm, routes_ops,
 };
 
 /// Main entry point for the authentication server.
@@ -104,6 +104,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 routes_api::api_auth,
             )),
         )
+        // /api/confirm-email has its own token list, so it sits beside
+        // the /api nest rather than inside it.
+        .merge(routes_confirm::router().layer(
+            axum::middleware::from_fn_with_state(
+                state.clone(),
+                routes_confirm::confirm_auth,
+            ),
+        ))
         // Finally some middleware to handle cookies, and the shared state.
         .layer(CookieManagerLayer::new())
         .with_state(state);
