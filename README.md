@@ -103,6 +103,8 @@ All configuration is handled via environment variables.
 | `MAX_PENDING_REQUESTS` | Maximum number of pending OAuth flows held in storage | `10` | No |
 | `API_TOKENS` | Comma-separated list of tokens authorized to call protected API endpoints | - | No |
 | `CONFIRM_TOKENS` | Comma-separated list of tokens that may call only `/api/confirm-email` | - | No |
+| `CONFIRM_RATE_PER_TOKEN` | Calls to `/api/confirm-email` one token may make per minute | `600` | No |
+| `CONFIRM_RATE_PER_KEY` | Calls to `/api/confirm-email` about one key per minute, across tokens | `30` | No |
 | `DRIFT_SECS` | Allowed clock skew in seconds for time-based validation | `300` | No |
 | `RUST_LOG` | Tracing log level filter | `hc_auth_server=debug,tower_http=debug` | No |
 
