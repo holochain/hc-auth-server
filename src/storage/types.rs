@@ -81,6 +81,8 @@ pub enum AuthResult {
 pub(crate) struct ObjectRecord {
     pub(crate) state: State,
     pub(crate) json: String,
+    /// The admin-written `verified` object, stored in its own hash field.
+    pub(crate) verified: Option<String>,
 }
 
 pub struct Storage {
