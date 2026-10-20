@@ -61,6 +61,25 @@ pub(crate) async fn transition(
         .await
 }
 
+/// Replaces a record's `verified` hash field, whatever its state.
+///
+/// Returns 1 when the record was updated and 0 when it does not exist.
+pub(crate) async fn set_verified(
+    con: &mut impl redis::aio::ConnectionLike,
+    key: &str,
+    verified: &str,
+) -> RedisResult<i64> {
+    static SCRIPT: OnceLock<Script> = OnceLock::new();
+    let script =
+        SCRIPT.get_or_init(|| Script::new(include_str!("set_verified.lua")));
+    script
+        .key(auth_key(key))
+        .arg(verified)
+        .arg(now_secs())
+        .invoke_async(con)
+        .await
+}
+
 /// Deletes an authentication request.
 pub(crate) async fn delete(
     con: &mut impl redis::aio::ConnectionLike,
@@ -71,7 +90,8 @@ pub(crate) async fn delete(
     script.key(auth_key(key)).arg(key).invoke_async(con).await
 }
 
-/// Fetches all records in a specific state.
+/// Fetches all records in a specific state as flat `[key, json, verified]`
+/// triples, with `verified` empty when the record has none.
 pub(crate) async fn get_all_by_state(
     con: &mut impl redis::aio::ConnectionLike,
     state: State,
