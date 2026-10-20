@@ -195,6 +195,24 @@ impl Storage {
         .map_err(Into::into)
     }
 
+    /// Counts a hit on a rate-limit counter and returns the count in the
+    /// current window, this hit included.
+    ///
+    /// The window is `seconds` long and starts at the first hit. `key` is
+    /// used as given, so callers pick a prefix that cannot collide with
+    /// `auth:` or `state:`.
+    pub async fn count_in_window(
+        &self,
+        key: &str,
+        seconds: u64,
+    ) -> Result<u64, Box<dyn std::error::Error>> {
+        self.with_connection(|mut con| async move {
+            Ok(lua::count_in_window(&mut con, key, seconds).await?)
+        })
+        .await
+        .map_err(Into::into)
+    }
+
     /// Helper to execute an async closure with a cloned connection manager,
     /// retrying once if the connection turned out to be dead.
     ///

@@ -80,6 +80,20 @@ pub(crate) async fn set_verified(
         .await
 }
 
+/// Counts a hit on `key` in a fixed window of `seconds`.
+///
+/// Returns the number of hits in the current window, this one included.
+pub(crate) async fn count_in_window(
+    con: &mut impl redis::aio::ConnectionLike,
+    key: &str,
+    seconds: u64,
+) -> RedisResult<u64> {
+    static SCRIPT: OnceLock<Script> = OnceLock::new();
+    let script =
+        SCRIPT.get_or_init(|| Script::new(include_str!("count_in_window.lua")));
+    script.key(key).arg(seconds).invoke_async(con).await
+}
+
 /// Deletes an authentication request.
 pub(crate) async fn delete(
     con: &mut impl redis::aio::ConnectionLike,
