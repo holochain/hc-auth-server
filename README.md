@@ -162,11 +162,13 @@ These routes provide programmatic access to management functions. All routes req
 | `/api/list` | `GET` | List all requests with states. | None | None | 401 (Unauthorized), 500 (Server Error) |
 | `/api/get/{key}` | `GET` | Get details (state, data) for a specific key. | `{key}`: Base64URL encoded public key. | None | 401 (Unauthorized), 404 (Not Found) |
 | `/api/transition` | `POST` | Move a key between states. | None | None | 400 (Invalid state), 401 (Unauthorized), 500 (Error) |
+| `/api/verified/{key}` | `PUT` | Replace the `verified` object in a key's data, in any state. | `{key}`: Base64URL encoded public key. | None | 400 (Invalid key or non-object body), 401 (Unauthorized), 404 (Not Found), 500 (Error) |
 
 **Notes on API routes**:
 - `/api/list` returns `[{ "state": "...", "pubKey": "..." }, ...]`.
 - `/api/get/{key}` returns `{ "state": "...", "pubKey": "...", "data": { ... } }`.
 - `/api/transition` body: `{ "pubKey": "...", "oldState": "...", "newState": "..." }`. Valid states: `pending`, `authorized`, `blocked`.
+- `/api/verified/{key}` body: a JSON object, for example `{ "email": "..." }`. It replaces `data.verified` atomically. `verified` is stored in its own field beside the rest of the record and merged into `data` on read, so nothing else in the record is touched. Only this route writes `verified`. `PUT /request-auth` metadata is caller-supplied and untrusted.
 
 ---
 

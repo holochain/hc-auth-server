@@ -161,7 +161,7 @@ pub async fn authenticate(
 }
 
 /// Validates that a string is a valid base64url encoded 32-byte public key.
-fn validate_pubkey(pk: &str) -> Result<(), ()> {
+pub(crate) fn validate_pubkey(pk: &str) -> Result<(), ()> {
     let pk = BASE64_URL_SAFE_NO_PAD.decode(pk).map_err(|_| ())?;
     if pk.len() != 32 {
         return Err(());

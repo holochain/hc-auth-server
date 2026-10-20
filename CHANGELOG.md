@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[Unreleased\]
+
+### Features
+
+- Add `PUT /api/verified/{key}`, an admin route that replaces a record's `verified` object in any state, and `CONFIRM_TOKENS`, a token list scoped to `/api/confirm-email`
+
 ## \[[0.1.6](https://github.com/holochain/hc-auth-server/compare/v0.1.5...v0.1.6)\] - 2026-08-04
 
 ### Bug Fixes
