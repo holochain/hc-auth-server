@@ -34,6 +34,8 @@ pub struct Config {
     pub max_pending_requests: usize,
     /// Set of valid API tokens for system administration.
     pub api_tokens: HashSet<String>,
+    /// Set of tokens that may call `/api/confirm-email` and nothing else.
+    pub confirm_tokens: HashSet<String>,
 
     /// Number of seconds to allow for clock skew between the server and the client.
     pub drift_secs: f64,
@@ -83,12 +85,8 @@ impl Config {
             max_pending_requests: env::var("MAX_PENDING_REQUESTS")
                 .unwrap_or_else(|_| "10".to_string())
                 .parse()?,
-            api_tokens: env::var("API_TOKENS")
-                .unwrap_or_default()
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect(),
+            api_tokens: parse_tokens("API_TOKENS"),
+            confirm_tokens: parse_tokens("CONFIRM_TOKENS"),
             drift_secs: env::var("DRIFT_SECS")
                 .unwrap_or_else(|_| "300.0".to_string()) // 5 minutes
                 .parse()?,
@@ -113,6 +111,19 @@ impl Config {
     }
 }
 
+/// Reads a comma separated token list from the named environment variable.
+///
+/// Tokens are trimmed and empty entries are dropped, so a trailing comma
+/// is harmless. A missing variable yields an empty set.
+fn parse_tokens(var: &str) -> HashSet<String> {
+    env::var(var)
+        .unwrap_or_default()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,6 +139,7 @@ mod tests {
         fn drop(&mut self) {
             unsafe {
                 env::remove_var("API_TOKENS");
+                env::remove_var("CONFIRM_TOKENS");
                 env::remove_var("GITHUB_CLIENT_ID");
                 env::remove_var("GITHUB_CLIENT_SECRET");
                 env::remove_var("GITHUB_ORG");
@@ -165,6 +177,17 @@ mod tests {
         assert!(config.api_tokens.contains("token2"));
         assert!(config.api_tokens.contains("token3"));
         unsafe { env::remove_var("API_TOKENS") };
+    }
+
+    #[test]
+    fn test_parse_confirm_tokens() {
+        let _guard = EnvGuard::new();
+        unsafe { env::set_var("CONFIRM_TOKENS", " c1, c2 ,,") };
+        let config = Config::from_env().unwrap();
+        assert_eq!(config.confirm_tokens.len(), 2);
+        assert!(config.confirm_tokens.contains("c1"));
+        assert!(config.confirm_tokens.contains("c2"));
+        assert!(config.api_tokens.is_empty());
     }
 
     #[test]
