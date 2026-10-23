@@ -26,6 +26,30 @@ fn is_retryable(err: &StorageErr) -> bool {
     matches!(err, StorageErr::Redis(e) if e.is_connection_dropped())
 }
 
+/// Puts the admin-written `verified` object into a record's data,
+/// replacing whatever was there.
+fn merge_verified(mut data: Value, verified: Value) -> Value {
+    data["verified"] = verified;
+    data
+}
+
+/// Builds a record's `data` from its `json` field and its `verified` field.
+///
+/// `verified` is stored beside `json`, not inside it, because only the
+/// admin API writes it while `json` is rewritten on every authentication.
+/// A `verified` key inside `json` is never trusted: it is dropped, and the
+/// hash field replaces it when present.
+fn record_data(json: &str, verified: Option<&str>) -> Value {
+    let mut data = parse_value(json);
+    if let Some(obj) = data.as_object_mut() {
+        obj.remove("verified");
+    }
+    match verified.map(parse_value) {
+        Some(verified) => merge_verified(data, verified),
+        None => data,
+    }
+}
+
 /// Formats the Redis key for an authentication record.
 pub(crate) fn auth_key(id: &str) -> String {
     format!("auth:{id}")
@@ -48,15 +72,24 @@ async fn redis_get_object(
 ) -> redis::RedisResult<Option<ObjectRecord>> {
     let key = auth_key(key);
 
-    let (state, json): (Option<String>, Option<String>) = redis::cmd("HMGET")
+    let (state, json, verified): (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) = redis::cmd("HMGET")
         .arg(&key)
         .arg("state")
         .arg("json")
+        .arg("verified")
         .query_async(con)
         .await?;
 
     match (state.and_then(|s| s.parse::<State>().ok()), json) {
-        (Some(state), Some(json)) => Ok(Some(ObjectRecord { state, json })),
+        (Some(state), Some(json)) => Ok(Some(ObjectRecord {
+            state,
+            json,
+            verified,
+        })),
         _ => Ok(None),
     }
 }
@@ -111,7 +144,9 @@ impl Storage {
         self.with_connection::<_, _, Option<(State, Value)>>(
             |mut con| async move {
                 if let Some(record) = redis_get_object(&mut con, key).await? {
-                    Ok(Some((record.state, parse_value(&record.json))))
+                    let data =
+                        record_data(&record.json, record.verified.as_deref());
+                    Ok(Some((record.state, data)))
                 } else {
                     Ok(None)
                 }
@@ -131,6 +166,48 @@ impl Storage {
         self.with_connection::<_, _, ()>(|mut con| async move {
             lua::transition(&mut con, key, from_state, to_state).await?;
             Ok(())
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    /// Replaces the `verified` object of a record, whatever its state.
+    ///
+    /// Only the admin API calls this. `verified` lives in its own hash
+    /// field, so the `json` field, including the caller-supplied `payload`,
+    /// is not touched, and a concurrent rewrite of `json` by
+    /// [`Storage::authenticate_key`] cannot lose it. Readers merge the two
+    /// with [`record_data`]. Returns `false` when no record exists for `key`.
+    pub async fn set_verified(
+        &self,
+        key: &str,
+        verified: &Value,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let verified = verified.to_string();
+        self.with_connection(|mut con| {
+            let verified = verified.clone();
+            async move {
+                let n = lua::set_verified(&mut con, key, &verified).await?;
+                Ok(n == 1)
+            }
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    /// Counts a hit on a rate-limit counter and returns the count in the
+    /// current window, this hit included.
+    ///
+    /// The window is `seconds` long and starts at the first hit. `key` is
+    /// used as given, so callers pick a prefix that cannot collide with
+    /// `auth:` or `state:`.
+    pub async fn count_in_window(
+        &self,
+        key: &str,
+        seconds: u64,
+    ) -> Result<u64, Box<dyn std::error::Error>> {
+        self.with_connection(|mut con| async move {
+            Ok(lua::count_in_window(&mut con, key, seconds).await?)
         })
         .await
         .map_err(Into::into)
@@ -263,10 +340,11 @@ impl Storage {
                 lua::get_all_by_state(&mut con, state).await?;
 
             let mut result = HashMap::new();
-            for chunk in res.as_chunks::<2>().0 {
+            for chunk in res.as_chunks::<3>().0 {
                 let key = chunk[0].clone();
-                let json = &chunk[1];
-                result.insert(key, parse_value(json));
+                let verified =
+                    Some(chunk[2].as_str()).filter(|v| !v.is_empty());
+                result.insert(key, record_data(&chunk[1], verified));
             }
             Ok(result)
         })
@@ -378,5 +456,55 @@ mod tests {
     #[test]
     fn non_redis_errors_are_not_retryable() {
         assert!(!is_retryable(&StorageErr::TooManyPendingRequests));
+    }
+
+    #[test]
+    fn record_data_merges_the_verified_field() {
+        let data = record_data(
+            r#"{"createdAt":1,"payload":{"email":"x@y.z"}}"#,
+            Some(r#"{"email":"v@y.z"}"#),
+        );
+        assert_eq!(data["verified"]["email"], "v@y.z");
+        assert_eq!(data["payload"]["email"], "x@y.z");
+        assert_eq!(data["createdAt"], 1);
+    }
+
+    #[test]
+    fn record_data_without_verified_has_no_verified_field() {
+        let data = record_data(r#"{"payload":{"email":"x@y.z"}}"#, None);
+        assert!(data.get("verified").is_none());
+        assert_eq!(data["payload"]["email"], "x@y.z");
+    }
+
+    #[test]
+    fn record_data_never_trusts_a_verified_field_inside_json() {
+        let json = r#"{"verified":{"email":"forged@y.z"},"payload":{}}"#;
+        let data = record_data(json, None);
+        assert!(data.get("verified").is_none());
+        let data = record_data(json, Some(r#"{"email":"v@y.z"}"#));
+        assert_eq!(data["verified"]["email"], "v@y.z");
+    }
+
+    #[test]
+    fn verified_replaces_only_the_verified_field() {
+        let before = serde_json::json!({
+            "createdAt": 1,
+            "payload": { "email": "x@y.z" },
+            "verified": { "email": "old@y.z" }
+        });
+        let after =
+            merge_verified(before, serde_json::json!({ "email": "new@y.z" }));
+        assert_eq!(after["verified"]["email"], "new@y.z");
+        assert_eq!(after["payload"]["email"], "x@y.z");
+        assert_eq!(after["createdAt"], 1);
+    }
+
+    #[test]
+    fn verified_is_added_when_absent() {
+        let before = serde_json::json!({ "payload": { "email": "x@y.z" } });
+        let after =
+            merge_verified(before, serde_json::json!({ "email": "new@y.z" }));
+        assert_eq!(after["verified"]["email"], "new@y.z");
+        assert_eq!(after["payload"]["email"], "x@y.z");
     }
 }

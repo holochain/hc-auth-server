@@ -3,10 +3,12 @@ pub mod github;
 pub mod oauth_http;
 pub mod routes_api;
 pub mod routes_client;
+pub mod routes_confirm;
 pub mod routes_ops;
 pub mod state;
 pub mod storage;
 pub mod tls;
+pub mod utils;
 
 pub use config::Config;
 pub use state::AppState;

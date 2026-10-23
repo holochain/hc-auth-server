@@ -19,6 +19,7 @@ This project is built using:
 - `src/routes_client.rs`: Handlers for client-facing authentication routes.
 - `src/routes_ops.rs`: Handlers for web-based administrative operations (OAuth, dashboard).
 - `src/routes_api.rs`: Handlers for programmatic administrative API access.
+- `src/routes_confirm.rs`: Handler for `/api/confirm-email`, gated by its own token list.
 - `src/storage.rs`: Abstracted storage layer for Redis interaction.
 - `src/github.rs`: Utilities for interacting with the GitHub API.
 - `templates/`: HTML templates used by the application.
@@ -102,6 +103,9 @@ All configuration is handled via environment variables.
 | `REDIS_URL` | Redis connection URL (standalone). The server exits at startup if this is not set | - | Yes |
 | `MAX_PENDING_REQUESTS` | Maximum number of pending OAuth flows held in storage | `10` | No |
 | `API_TOKENS` | Comma-separated list of tokens authorized to call protected API endpoints | - | No |
+| `CONFIRM_TOKENS` | Comma-separated list of tokens that may call only `/api/confirm-email` | - | No |
+| `CONFIRM_RATE_PER_TOKEN` | Calls to `/api/confirm-email` one token may make per minute | `600` | No |
+| `CONFIRM_RATE_PER_KEY` | Calls to `/api/confirm-email` about one key per minute, across tokens | `30` | No |
 | `DRIFT_SECS` | Allowed clock skew in seconds for time-based validation | `300` | No |
 | `RUST_LOG` | Tracing log level filter | `hc_auth_server=debug,tower_http=debug` | No |
 
@@ -161,11 +165,26 @@ These routes provide programmatic access to management functions. All routes req
 | `/api/list` | `GET` | List all requests with states. | None | None | 401 (Unauthorized), 500 (Server Error) |
 | `/api/get/{key}` | `GET` | Get details (state, data) for a specific key. | `{key}`: Base64URL encoded public key. | None | 401 (Unauthorized), 404 (Not Found) |
 | `/api/transition` | `POST` | Move a key between states. | None | None | 400 (Invalid state), 401 (Unauthorized), 500 (Error) |
+| `/api/verified/{key}` | `PUT` | Replace the `verified` object in a key's data, in any state. | `{key}`: Base64URL encoded public key. | None | 400 (Invalid key or non-object body), 401 (Unauthorized), 404 (Not Found), 500 (Error) |
+
+#### Confirm Route
+This route is for a service that needs to check an email binding and nothing more. It requires `Authorization: Bearer <token>` with a token from `CONFIRM_TOKENS`, not `API_TOKENS`.
+
+| Route | Method | Description | Path Elements | Query Params | Error Codes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `/api/confirm-email` | `POST` | Is this key authorized and bound to this email? | None | None | 400 (Invalid body or key), 401 (Unauthorized), 429 (Rate limited), 500 (Error) |
+
+**Notes on `/api/confirm-email`**:
+- Body: `{ "pubKey": "<base64url raw 32-byte key>", "email": "<address>" }`.
+- Reply: `200` with the JSON body `true` or `false`. `true` only when the key exists, its state is `authorized`, and `data.verified.email` equals `email` after both are trimmed and ASCII lower-cased. Every other outcome, including an unknown key, is `false`.
+- This route never returns the stored email.
+- Rate limits, per minute: `CONFIRM_RATE_PER_TOKEN` per token (default 600) and `CONFIRM_RATE_PER_KEY` per `pubKey` across tokens (default 30). Over the limit the reply is `429`.
 
 **Notes on API routes**:
 - `/api/list` returns `[{ "state": "...", "pubKey": "..." }, ...]`.
 - `/api/get/{key}` returns `{ "state": "...", "pubKey": "...", "data": { ... } }`.
 - `/api/transition` body: `{ "pubKey": "...", "oldState": "...", "newState": "..." }`. Valid states: `pending`, `authorized`, `blocked`.
+- `/api/verified/{key}` body: a JSON object, for example `{ "email": "..." }`. It replaces `data.verified` atomically. `verified` is stored in its own field beside the rest of the record and merged into `data` on read, so nothing else in the record is touched. Only this route writes `verified`. `PUT /request-auth` metadata is caller-supplied and untrusted.
 
 ---
 
