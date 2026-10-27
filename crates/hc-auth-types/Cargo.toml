@@ -1,7 +1,0 @@
-[package]
-name = "hc-auth-types"
-version.workspace = true
-edition.workspace = true
-description = "Values shared by hc-auth-server and its clients"
-
-[dependencies]
