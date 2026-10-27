@@ -19,15 +19,7 @@ pub fn router() -> Router<SharedState> {
 }
 use base64::prelude::*;
 use ed25519_dalek::{Signature, VerifyingKey};
-
-/// Prefix a client puts before the `/now` payload, so the signature is valid for this purpose only.
-pub const CHALLENGE_SIGNING_PREFIX: &[u8] = b"hc-auth-challenge-v1:";
-
-/// The bytes a client signs for a `/now` payload: [`CHALLENGE_SIGNING_PREFIX`]
-/// followed by the decoded payload.
-pub fn challenge_signing_bytes(payload: &[u8]) -> Vec<u8> {
-    [CHALLENGE_SIGNING_PREFIX, payload].concat()
-}
+use hc_auth_types::{CHALLENGE_LEN, challenge_signing_bytes};
 
 /// GET /now - Returns the current server time and a random nonce, base64url encoded.
 ///
@@ -39,7 +31,7 @@ pub async fn now_handler() -> impl IntoResponse {
     // Current time as f64 seconds since epoch
     let now = now();
 
-    let mut buf = [0u8; 32];
+    let mut buf = [0u8; CHALLENGE_LEN];
 
     // First 8 bytes: timestamp (f64 LE)
     buf[..8].copy_from_slice(&now.to_le_bytes());
@@ -217,9 +209,8 @@ fn validate_signature(
         .decode(base64_url_encoded_payload)
         .map_err(|_| ())?;
 
-    if payload_bytes.len() != 32 {
-        return Err(());
-    }
+    let payload: [u8; CHALLENGE_LEN] =
+        payload_bytes.try_into().map_err(|_| ())?;
 
     // Parse key and signature
     let verifying_key =
@@ -231,7 +222,7 @@ fn validate_signature(
 
     // Verify
     verifying_key
-        .verify_strict(&challenge_signing_bytes(&payload_bytes), &signature)
+        .verify_strict(&challenge_signing_bytes(&payload), &signature)
         .map_err(|_| ())?;
 
     Ok(())
@@ -282,11 +273,10 @@ mod tests {
     fn refuses_a_payload_that_is_not_32_bytes() {
         let key = SigningKey::from_bytes(&[7; 32]);
         let payload = [1u8; 33];
+        let signed =
+            [hc_auth_types::CHALLENGE_SIGNING_PREFIX, &payload].concat();
 
-        assert!(
-            validate(&key, &challenge_signing_bytes(&payload), &payload)
-                .is_err()
-        );
+        assert!(validate(&key, &signed, &payload).is_err());
     }
 
     #[test]
