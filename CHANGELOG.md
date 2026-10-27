@@ -6,11 +6,61 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## \[Unreleased\]
 
+## \[[0.1.8](https://github.com/holochain/hc-auth-server/compare/v0.1.7...v0.1.8)\] - 2026-10-27
+
 ### Features
 
 - Add `PUT /api/verified/{key}`, an admin route that replaces a record's `verified` object in any state, and `CONFIRM_TOKENS`, a token list scoped to `/api/confirm-email`
 - Add `POST /api/confirm-email`, a rate-limited yes/no check that an authorized key's `verified.email` matches, gated by `CONFIRM_TOKENS`. The limits are `CONFIRM_RATE_PER_TOKEN` and `CONFIRM_RATE_PER_KEY`
+
+### Bug Fixes
+
 - API tokens are compared in constant time
+
+### Documentation
+
+- The example client calls `PUT /api/verified` and `POST /api/confirm-email`
+
+### Miscellaneous Tasks
+
+- Update the AI_POLICY.md with shared content
+- Update dependabot.yml with shared content
+
+### Automated Changes
+
+- *(deps)* Bump rust-toolchain from 1.98.0 to 1.98.1 by @dependabot[bot]
+- *(deps)* Bump the cargo-minor-patch group with 4 updates by @dependabot[bot]
+- *(deps)* Bump the cargo-minor-patch group across 1 directory with 4 updates by @dependabot[bot]
+- *(deps)* Bump the updates group with 2 updates by @dependabot[bot]
+
+## \[[0.1.7](https://github.com/holochain/hc-auth-server/compare/v0.1.6...v0.1.7)\] - 2026-08-27
+
+### Bug Fixes
+
+- Retry a Redis command once after a dropped connection
+
+### Documentation
+
+- Correct the `REDIS_URL` requirement in the README
+
+### Refactor
+
+- Update the use of the `oauth2` crate after the version bump
+
+### Miscellaneous Tasks
+
+- Address a clippy warning for `as_chunks` after the Rust upgrade
+- Update the AI_POLICY.md and CONTRIBUTING.md with shared content
+
+### Automated Changes
+
+- *(deps)* Bump redis from 0.32.7 to 1.2.4 by @dependabot[bot]
+- *(deps)* Bump askama from 0.15.4 to 0.16.0 by @dependabot[bot]
+- *(deps)* Bump oauth2 from 4.4.2 to 5.0.0 by @dependabot[bot]
+- *(deps)* Bump rust-toolchain from 1.97.1 to 1.98.0 by @dependabot[bot]
+- *(deps)* Bump the cargo-minor-patch group across 1 directory with 3 updates by @dependabot[bot]
+- *(deps)* Bump the cargo-minor-patch group with 2 updates by @dependabot[bot]
+- *(deps)* Bump the updates group with 2 updates by @dependabot[bot]
 
 ## \[[0.1.6](https://github.com/holochain/hc-auth-server/compare/v0.1.5...v0.1.6)\] - 2026-08-04
 
