@@ -101,7 +101,7 @@ All configuration is handled via environment variables.
 | `TLS_CERT` | Path to PEM-encoded TLS certificate file | - | No* |
 | `TLS_KEY` | Path to PEM-encoded TLS private key file | - | No* |
 | `REDIS_URL` | Redis connection URL (standalone). The server exits at startup if this is not set | - | Yes |
-| `MAX_PENDING_REQUESTS` | Maximum number of pending OAuth flows held in storage | `10` | No |
+| `MAX_PENDING_REQUESTS` | Maximum number of pending `request-auth` registrations held in storage. Pending entries never expire | `10000` | No |
 | `API_TOKENS` | Comma-separated list of tokens authorized to call protected API endpoints | - | No |
 | `CONFIRM_TOKENS` | Comma-separated list of tokens that may call only `/api/confirm-email` | - | No |
 | `CONFIRM_RATE_PER_TOKEN` | Calls to `/api/confirm-email` one token may make per minute | `600` | No |
@@ -123,6 +123,16 @@ dd if=/dev/random bs=66 count=1 | base64 -w0
 - **Health**: Standard HTTP health checks can be performed against the root endpoint `/` (returns public home page) or you may want to ensure the process accepts TCP connections. Note that the restricted operations area is now under `/ops-auth`.
 
 ### Operational Notes
+
+Pending registrations created by `PUT /request-auth/{key}` never expire and
+the route needs no credentials. Once `MAX_PENDING_REQUESTS` entries are
+pending, new registrations get `429` until an operator approves, blocks or
+deletes some. Existing authorized clients are not affected.
+
+To make filling the pool costly, rate limit `PUT /request-auth/{key}` per
+client IP at the reverse proxy in front of the server. Start with a loose
+limit. Limit only this path: a joining service calls `/api/*` from a fixed
+address and must not be throttled with it.
 
 ### API Documentation
 

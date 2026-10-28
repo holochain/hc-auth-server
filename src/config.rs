@@ -31,6 +31,7 @@ pub struct Config {
     /// Redis connection URL.
     pub redis_url: Option<String>,
     /// Maximum number of pending authentication requests allowed in Redis.
+    /// Defaults to 10000.
     pub max_pending_requests: usize,
     /// Set of valid API tokens for system administration.
     pub api_tokens: HashSet<String>,
@@ -87,7 +88,9 @@ impl Config {
                 .parse()?,
             redis_url: env::var("REDIS_URL").ok(),
             max_pending_requests: env::var("MAX_PENDING_REQUESTS")
-                .unwrap_or_else(|_| "10".to_string())
+                // Pending entries never expire and the ops page renders all of them,
+                // so this bound trades Redis size and page length for enrollment headroom.
+                .unwrap_or_else(|_| "10000".to_string())
                 .parse()?,
             api_tokens: parse_tokens("API_TOKENS"),
             confirm_tokens: parse_tokens("CONFIRM_TOKENS"),
@@ -156,6 +159,7 @@ mod tests {
                 env::remove_var("GITHUB_CLIENT_SECRET");
                 env::remove_var("GITHUB_ORG");
                 env::remove_var("GITHUB_TEAM");
+                env::remove_var("MAX_PENDING_REQUESTS");
                 env::remove_var("SESSION_SECRET");
                 env::remove_var("PRODUCTION");
             };
@@ -220,6 +224,21 @@ mod tests {
         let config = Config::from_env().unwrap();
         assert_eq!(config.confirm_rate_per_token, 10);
         assert_eq!(config.confirm_rate_per_key, 2);
+    }
+
+    #[test]
+    fn test_max_pending_requests_default() {
+        let _guard = EnvGuard::new();
+        let config = Config::from_env().unwrap();
+        assert_eq!(config.max_pending_requests, 10_000);
+    }
+
+    #[test]
+    fn test_max_pending_requests_override() {
+        let _guard = EnvGuard::new();
+        unsafe { env::set_var("MAX_PENDING_REQUESTS", "100") };
+        let config = Config::from_env().unwrap();
+        assert_eq!(config.max_pending_requests, 100);
     }
 
     #[test]
