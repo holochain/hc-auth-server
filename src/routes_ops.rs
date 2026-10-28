@@ -25,10 +25,40 @@ use oauth2::{
 };
 use serde::Deserialize;
 use std::collections::HashMap;
-use tower_cookies::{Cookie, Cookies};
+use tower_cookies::{Cookie, Cookies, Key};
 
 use crate::github::GitHubClient;
 use crate::state::AppState as SharedState;
+
+enum CookiePurpose {
+    UserSession,
+    CsrfId,
+}
+
+impl AsRef<str> for CookiePurpose {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::UserSession => "user_session",
+            Self::CsrfId => "csrf_id",
+        }
+    }
+}
+
+impl CookiePurpose {
+    fn cookie(&self, value: &str) -> Cookie<'_> {
+        Cookie::new(self.as_ref(), format!("{}:{value}", self.as_ref()))
+    }
+
+    fn get(&self, cookies: &Cookies, key: &Key) -> Option<String> {
+        // The signature authenticates the value, not the cookie name.
+        let cookie = cookies.signed(key).get(self.as_ref())?;
+        cookie
+            .value()
+            .strip_prefix(self.as_ref())?
+            .strip_prefix(':')
+            .map(str::to_owned)
+    }
+}
 
 /// Template for the home page.
 #[derive(Template)]
@@ -72,13 +102,8 @@ pub async fn ops_home(
     Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
     let key = tower_cookies::Key::from(&state.config.session_secret);
-    let signed_cookies = cookies.signed(&key);
-    let user_session = signed_cookies.get("user_session");
-
-    let (logged_in, username) = match user_session {
-        Some(cookie) => (true, Some(cookie.value().to_string())),
-        None => (false, None),
-    };
+    let username = CookiePurpose::UserSession.get(&cookies, &key);
+    let logged_in = username.is_some();
 
     let error = params.get("error").cloned();
 
@@ -101,11 +126,8 @@ pub async fn ops_auth(
     Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
     let key = tower_cookies::Key::from(&state.config.session_secret);
-    let signed_cookies = cookies.signed(&key);
 
-    if let Some(cookie) = signed_cookies.get("user_session") {
-        let username = cookie.value().to_string();
-
+    if let Some(username) = CookiePurpose::UserSession.get(&cookies, &key) {
         // Handle CSRF token for the session
         let csrf_token = {
             let mut csrf_tokens = state.csrf_tokens.lock().unwrap();
@@ -198,7 +220,7 @@ pub async fn ops_auth(
         }
 
         let template = ProtectedTemplate {
-            username: cookie.value().to_string(),
+            username,
             authorized_keys,
             unauthorized_keys,
             blocked_keys,
@@ -226,10 +248,8 @@ pub async fn ops_approve(
     Form(form): Form<OpsRequest>,
 ) -> impl IntoResponse {
     let key = tower_cookies::Key::from(&state.config.session_secret);
-    let signed_cookies = cookies.signed(&key);
 
-    if let Some(cookie) = signed_cookies.get("user_session") {
-        let username = cookie.value().to_string();
+    if let Some(username) = CookiePurpose::UserSession.get(&cookies, &key) {
         let expected_token = {
             let csrf_tokens = state.csrf_tokens.lock().unwrap();
             csrf_tokens.get(&username).map(|e| e.token.clone())
@@ -269,10 +289,8 @@ pub async fn ops_block(
     Form(form): Form<OpsRequest>,
 ) -> impl IntoResponse {
     let key = tower_cookies::Key::from(&state.config.session_secret);
-    let signed_cookies = cookies.signed(&key);
 
-    if let Some(cookie) = signed_cookies.get("user_session") {
-        let username = cookie.value().to_string();
+    if let Some(username) = CookiePurpose::UserSession.get(&cookies, &key) {
         let expected_token = {
             let csrf_tokens = state.csrf_tokens.lock().unwrap();
             csrf_tokens.get(&username).map(|e| e.token.clone())
@@ -312,10 +330,8 @@ pub async fn ops_delete(
     Form(form): Form<OpsRequest>,
 ) -> impl IntoResponse {
     let key = tower_cookies::Key::from(&state.config.session_secret);
-    let signed_cookies = cookies.signed(&key);
 
-    if let Some(cookie) = signed_cookies.get("user_session") {
-        let username = cookie.value().to_string();
+    if let Some(username) = CookiePurpose::UserSession.get(&cookies, &key) {
         let expected_token = {
             let csrf_tokens = state.csrf_tokens.lock().unwrap();
             csrf_tokens.get(&username).map(|e| e.token.clone())
@@ -435,7 +451,7 @@ pub async fn ops_oauth_login(
     }
 
     // Set csrf_id cookie
-    let mut cookie = Cookie::new("csrf_id", csrf_id.clone());
+    let mut cookie = CookiePurpose::CsrfId.cookie(&csrf_id);
     cookie.set_path("/");
     cookie.set_http_only(true);
     if state.config.production {
@@ -459,9 +475,8 @@ pub async fn ops_oauth_callback(
 
     // Verify CSRF state and PKCE verifier
     let key = tower_cookies::Key::from(&state.config.session_secret);
-    let signed_cookies = cookies.signed(&key);
-    let csrf_id = match signed_cookies.get("csrf_id") {
-        Some(c) => c.value().to_string(),
+    let csrf_id = match CookiePurpose::CsrfId.get(&cookies, &key) {
+        Some(id) => id,
         None => {
             tracing::warn!("Missing csrf_id cookie");
             return Redirect::to("/?error=missing_csrf").into_response();
@@ -515,7 +530,7 @@ pub async fn ops_oauth_callback(
                     match gh_client.get_user().await {
                         Ok(user) => {
                             let mut cookie =
-                                Cookie::new("user_session", user.login);
+                                CookiePurpose::UserSession.cookie(&user.login);
                             cookie.set_path("/");
                             cookie.set_http_only(true);
                             if state.config.production {
@@ -574,5 +589,103 @@ pub async fn ops_oauth_callback(
             tracing::error!("Token exchange failed: {}", e);
             Redirect::to("/").into_response()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn oauth_state_cannot_be_used_as_an_operator_session() {
+        let key = Key::from(&[42; 64]);
+        let cookies = Cookies::default();
+        cookies
+            .signed(&key)
+            .add(CookiePurpose::CsrfId.cookie("123456"));
+        assert_eq!(
+            CookiePurpose::CsrfId.get(&cookies, &key).as_deref(),
+            Some("123456")
+        );
+        let mut renamed = cookies.get("csrf_id").unwrap().into_owned();
+        renamed.set_name("user_session");
+        cookies.add(renamed);
+
+        assert!(CookiePurpose::UserSession.get(&cookies, &key).is_none());
+    }
+
+    #[test]
+    fn operator_session_cannot_be_used_as_oauth_state() {
+        let key = Key::from(&[42; 64]);
+        let cookies = Cookies::default();
+        cookies
+            .signed(&key)
+            .add(Cookie::new("user_session", "user_session:alice"));
+        assert_eq!(
+            CookiePurpose::UserSession.get(&cookies, &key).as_deref(),
+            Some("alice")
+        );
+        let mut renamed = cookies.get("user_session").unwrap().into_owned();
+        renamed.set_name("csrf_id");
+        cookies.add(renamed);
+
+        assert!(CookiePurpose::CsrfId.get(&cookies, &key).is_none());
+    }
+
+    #[test]
+    fn legacy_cookies_without_a_purpose_are_rejected() {
+        let key = Key::from(&[42; 64]);
+        let cookies = Cookies::default();
+        cookies
+            .signed(&key)
+            .add(Cookie::new("user_session", "alice"));
+        cookies.signed(&key).add(Cookie::new("csrf_id", "123456"));
+
+        assert!(CookiePurpose::UserSession.get(&cookies, &key).is_none());
+        assert!(CookiePurpose::CsrfId.get(&cookies, &key).is_none());
+    }
+
+    #[test]
+    fn unknown_purposes_are_rejected() {
+        let key = Key::from(&[42; 64]);
+        let cookies = Cookies::default();
+        for value in ["other:alice", "user_session_extra:alice"] {
+            cookies.signed(&key).add(Cookie::new("user_session", value));
+
+            assert!(
+                CookiePurpose::UserSession.get(&cookies, &key).is_none(),
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
+    fn changing_the_purpose_invalidates_the_cookie() {
+        let key = Key::from(&[42; 64]);
+        let cookies = Cookies::default();
+        cookies
+            .signed(&key)
+            .add(CookiePurpose::CsrfId.cookie("123456"));
+        assert_eq!(
+            CookiePurpose::CsrfId.get(&cookies, &key).as_deref(),
+            Some("123456")
+        );
+        let altered = cookies
+            .get("csrf_id")
+            .unwrap()
+            .value()
+            .replace("csrf_id:", "user_session:");
+        cookies.add(Cookie::new("user_session", altered));
+
+        assert!(CookiePurpose::UserSession.get(&cookies, &key).is_none());
+    }
+
+    #[test]
+    fn unsigned_cookies_with_a_valid_purpose_are_rejected() {
+        let key = Key::from(&[42; 64]);
+        let cookies = Cookies::default();
+        cookies.add(CookiePurpose::UserSession.cookie("alice"));
+
+        assert!(CookiePurpose::UserSession.get(&cookies, &key).is_none());
     }
 }
