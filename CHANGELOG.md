@@ -72,11 +72,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## \[Unreleased\]
 
+### Breaking Changes
+
+- `/authenticate` verifies the signature over `hc-auth-challenge-v1:` followed by the decoded `/now` payload. Clients must sign the prefixed form. A signature over the bare payload is refused.
+
 ### Features
 
 - Add `PUT /api/verified/{key}`, an admin route that replaces a record's `verified` object in any state, and `CONFIRM_TOKENS`, a token list scoped to `/api/confirm-email`
-- Add `POST /api/confirm-email`, a rate-limited yes/no check that an authorized key's `verified.email` matches, gated by `CONFIRM_TOKENS`; limits are `CONFIRM_RATE_PER_TOKEN` and `CONFIRM_RATE_PER_KEY`
+- Add `POST /api/confirm-email`, a rate-limited yes/no check that an authorized key's `verified.email` matches, gated by `CONFIRM_TOKENS`. The limits are `CONFIRM_RATE_PER_TOKEN` and `CONFIRM_RATE_PER_KEY`
 - API tokens are compared in constant time
+- Add the `hc-auth-types` crate, which holds the challenge prefix shared by the server and its clients
 
 ## \[[0.1.6](https://github.com/holochain/hc-auth-server/compare/v0.1.5...v0.1.6)\] - 2026-08-04
 
